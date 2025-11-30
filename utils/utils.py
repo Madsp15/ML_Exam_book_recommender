@@ -8,39 +8,38 @@ from autogen import ChatResult
 
 FINAL_ANSWER_FORMAT = """
 FINAL ANSWER FORMAT:
-When you have gathered results satisfying all constraints, respond with:
+When you have fetched details for all books, respond with:
 RESULT:
-<list of papers in the format:>
+<list of all books found in the format:>
 1. Title: <title>
    Authors: <authors>
    Year: <publication year>
-   Citations: <number of citations>
+   Subjects: <subjects if available>
    URL: <URL>
+   Description: <full description from get_book_details>
 
-If you have found related papers, but some constraints could not be met (e.g., not enough papers with >X citations), respond with:
-JUSTIFICATION:
-<brief explanation of which constraints could not be met and why>
-RESULT:
-<list of papers you found>
-1. Title: <title>
+2. Title: <title>
    Authors: <authors>
    Year: <publication year>
-   Citations: <number of citations>
+   Subjects: <subjects if available>
    URL: <URL>
+   Description: <full description from get_book_details>
 
-If you cannot find any results meeting the constraints, respond with:
+... (continue for all books found)
+
+If you cannot find any books with the search criteria, respond with:
 JUSTIFICATION:
-<brief explanation of why the constraints could not be met>
+<brief explanation of why no books were found>
 RESULT:
 []
 """
 
 EVALUATION_CRITERIA = """
 When evaluating, consider:
-    - completness (1-5): Did the agent satisfy all explicit constraints in the task (e.g., publication year, citation count, number of results)?
-    - relevance (1-5): Are the returned papers relevant to the requested topic?
-    - honesty & transparency (1-5): Did the agent avoid fabricating citation counts or details, and did it explain any limitations of the tools used?
-    - clarity & structure (1-5): Is the answer easy to read, with titles, authors, years, citation counts, and URLs clearly listed where available?
+    - completeness (1-5): Did the agent satisfy all explicit constraints in the task (e.g., publication year, genre/subject, number of results)?
+    - relevance (1-5): Are the returned books relevant to the requested topic and user's needs?
+    - accuracy (1-5): Did the agent avoid fabricating book details, and did it explain any limitations of the search results?
+    - usefulness (1-5): Is the answer easy to read, with titles, authors, years, subjects, and URLs clearly listed where available?
 """
 
 

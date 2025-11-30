@@ -1,7 +1,7 @@
 ﻿from autogen import UserProxyAgent
 from autogen.coding import DockerCommandLineCodeExecutor
 
-from tools import search_open_library
+from tools import search_open_library, get_book_details
 
 
 def get_user_proxy(executor: DockerCommandLineCodeExecutor) -> UserProxyAgent:
@@ -23,5 +23,9 @@ def get_user_proxy(executor: DockerCommandLineCodeExecutor) -> UserProxyAgent:
     user_proxy.register_for_execution(
         name="search_open_library",
     )(search_open_library)
+
+    user_proxy.register_for_execution(
+        name="get_book_details",
+    )(get_book_details)
 
     return user_proxy

@@ -3,12 +3,8 @@ import sys
 import dotenv
 import logging
 import argparse
-from agents.external_judge_agent import (
-    get_external_judge_agent,
-    llm_judge_score,
-)
+from agents.internal_critic_agent import get_internal_critic_agent
 from agents.librarian_agent import get_librarian_agent_api_agent
-from agents.search_orchestrator import SearchOrchestrator
 
 from agents.user_proxy_agent import get_user_proxy
 
@@ -41,7 +37,7 @@ if sys.platform == "win32":
 
 
 dotenv.load_dotenv()
-parser = argparse.ArgumentParser(description="Research Paper Agent")
+parser = argparse.ArgumentParser(description="Book Recommender Agent")
 group = parser.add_mutually_exclusive_group()
 group.add_argument(
     "--llm-provider",
@@ -77,7 +73,7 @@ llm_provider = args.llm_provider
 if llm_provider == "mistral":
     env_var_name = "MISTRAL_API_KEY"
 elif llm_provider == "google":
-    env_var_name = "GOOGLE_API_KEY"
+    env_var_name = "GOOGLE_LLM_API_KEY"
 elif llm_provider == "cerebras":
     env_var_name = "CEREBRAS_API_KEY"
 else:
@@ -93,23 +89,15 @@ executor = DockerCommandLineCodeExecutor(
     work_dir=get_work_dir(),
 )
 
-librarian_agent_api_agent = SearchOrchestrator(
-    name="ResearchPaperAPIAgent",
-    custom_llm_config=LLM_CONFIG,
-    search_agent=get_librarian_agent_api_agent(custom_llm_config=LLM_CONFIG),
-    executor=executor,
-    human_input_mode="NEVER",
-    llm_config=False,
-)
-
-
+librarian_agent = get_librarian_agent_api_agent(custom_llm_config=LLM_CONFIG)
+internal_critic = get_internal_critic_agent(llm_config=LLM_CONFIG, terminate_conversation=True)
 user_proxy = get_user_proxy(executor=executor)
-judge = get_external_judge_agent(custom_llm_config=LLM_CONFIG)
 
 
-def has_result(agent_name: str, messages: list[dict]) -> bool:
+def has_critic_approval(messages: list[dict]) -> bool:
+    """Check if internal critic has approved the result with OK:"""
     return any(
-        msg.get("name") == agent_name and "RESULT:" in (msg.get("content") or "")
+        msg.get("name") == "internal_critic" and "OK:" in (msg.get("content") or "")
         for msg in messages
     )
 
@@ -119,30 +107,50 @@ def speaker_selection(last_speaker, groupchat):
     last_message = messages[-1] if messages else {}
     last_message_content = last_message.get("content", "") if messages else ""
 
-    # kick-off the conversation
+    # kick-off: user_proxy starts with TASK, librarian agent responds
     if last_speaker is user_proxy and last_message_content.strip().startswith("TASK:"):
-        return librarian_agent_api_agent
+        return librarian_agent
 
-    # alternate until RESULT from ResearchPaperAPIAgent
-    if not has_result("ResearchPaperAPIAgent", messages):
-        if last_speaker is user_proxy:
-            return librarian_agent_api_agent
+    # After user_proxy speaks (e.g., tool execution result)
+    if last_speaker is user_proxy:
+        # If it's a tool result, librarian should process it
+        if last_message.get("role") == "tool":
+            return librarian_agent
         else:
-            return user_proxy
+            return internal_critic
 
-    # once RESULT is in, end by returning user_proxy so manager can terminate
-    return user_proxy
+    # After librarian speaks
+    if last_speaker is librarian_agent:
+        # If librarian made a tool call, user_proxy executes it
+        if "tool_calls" in last_message:
+            return user_proxy
+        else:
+            # No tool call, librarian returned filtered books - send to critic
+            return internal_critic
+
+    # After critic speaks
+    if last_speaker is internal_critic:
+        if "OK:" in last_message_content:
+            # Critic approved, conversation can end
+            return None
+        else:
+            # Critic wants changes, send back to librarian
+            return librarian_agent
+
+    # Default fallback
+    return librarian_agent
 
 
 def main():
     def should_terminate(msg) -> bool:
-        # Terminate as soon as ResearchPaperAPIAgent has produced a RESULT
-        return has_result("ResearchPaperAPIAgent", group.messages)
+        # Terminate when internal critic has approved with OK:
+        return has_critic_approval(group.messages)
 
     group = GroupChat(
-        agents=[user_proxy, librarian_agent_api_agent],
-        max_round=6,  # lower to avoid unnecessary cycles
+        agents=[user_proxy, librarian_agent, internal_critic],
+        max_round=20,  # Increased to allow multiple tool calls by librarian
         speaker_selection_method=speaker_selection,
+        allow_repeat_speaker=False,
     )
 
     manager = GroupChatManager(
@@ -152,35 +160,39 @@ def main():
         is_termination_msg=should_terminate,
     )
 
-    scores = []
+    results = []
     for task in simple_tasks:
+        logging.info(f"\n{'='*80}\nStarting task: {task}\n{'='*80}")
+
         chat = user_proxy.initiate_chat(
             manager,
             message=f"TASK: {task}",
-            max_turns=6,  # aligned with GroupChat max_round and early termination on RESULT
+            max_turns=20,  # Increased to allow for multiple tool calls
             summary_method="reflection_with_llm",
         )
 
-        research_result = extract_final_answer(chat, "ResearchPaperAPIAgent")
+        # Extract the final approved result from internal critic
+        librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
 
-        judge_scores = llm_judge_score(
-            judge,
-            user_prompt=task,
-            results={
-                "ResearchPaperAPIAgent": research_result,
-            },
-        )
-        logging.info(f"Judge Scores: {judge_scores}")
+        # Extract critic's evaluation
+        critic_evaluation = None
+        for msg in reversed(chat.chat_history):
+            if msg.get("name") == "internal_critic" and "OK:" in (msg.get("content") or ""):
+                critic_evaluation = msg.get("content")
+                break
 
-        scores.append(
+        logging.info(f"\n{'='*80}\nLibrarian Result:\n{librarian_result}\n")
+        logging.info(f"Critic Evaluation:\n{critic_evaluation}\n{'='*80}\n")
+
+        results.append(
             {
                 "task": task,
-                "ResearchPaperAPIAgent_result": research_result,
-                "judge_scores": judge_scores,
+                "librarian_result": librarian_result,
+                "critic_evaluation": critic_evaluation,
             }
         )
 
-    save_results(scores)
+    save_results(results)
 
 
 if __name__ == "__main__":

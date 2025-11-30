@@ -8,13 +8,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API Keys
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_LLM_API_KEY = os.getenv("GOOGLE_LLM_API_KEY")
+GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
 
 # LLM Configuration
 LLM_CONFIG = {
 "model": "gemini-2.0-flash",
 "api_type": "google",
-"api_key": GOOGLE_API_KEY,
+"api_key": GOOGLE_LLM_API_KEY,
 "api_rate_limit": 0.1,
 "max_retries": 3,
 "num_predict": -1,
@@ -33,4 +34,3 @@ OPEN_LIBRARY_WORKS_URL = f"{OPEN_LIBRARY_BASE_URL}/works"
 
 # Agent Configuration
 MAX_CONSECUTIVE_AUTO_REPLY = 10
-

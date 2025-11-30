@@ -7,7 +7,7 @@ from utils.utils import EVALUATION_CRITERIA
 
 def build_external_judge_prompt(task: str, results: dict[str, str]) -> str:
     return f"""
-        You are evaluating research paper agents' results for the following task:
+        You are evaluating book search agents' results for the following task:
         "{task}"
 
         Here are the results from different agents:
@@ -15,7 +15,6 @@ def build_external_judge_prompt(task: str, results: dict[str, str]) -> str:
 
         Evaluate accordingly to your system message and return the required JSON scores.
         """
-
 
 def llm_judge_score(
         judge_agent: AssistantAgent, user_prompt: str, results: dict[str, str]
@@ -41,30 +40,30 @@ def get_external_judge_agent(custom_llm_config: dict) -> AssistantAgent:
         name="judge",
         llm_config=custom_llm_config,
         system_message=f"""
-            You are an external evaluator of research paper agents. You will be given several sets of results from different agents attempting to complete the same research task.
-            Your role is to score and compare the quality of the results based on how well they meet the task requirements.
+                   You are an external evaluator of book search agents. You will be given several sets of results from different agents attempting to complete the same book search task.
+                   Your role is to score and compare the quality of the results based on how well they meet the task requirements.
 
-            {EVALUATION_CRITERIA}
+                   {EVALUATION_CRITERIA}
 
-            Return the response exactly as follows (expand the array according to the number of results), no extra commentary:
-            TERMINATE:
-            ```json
-            {{
-                "result_1": {{
-                    "completness": <score 1-5>,
-                    "relevance": <score 1-5>,
-                    "honesty & transparency": <score 1-5>,
-                    "clarity & structure": <score 1-5>
-                }},
-                "result_2": {{
-                    "completness": <score 1-5>,
-                    "relevance": <score 1-5>,
-                    "honesty & transparency": <score 1-5>,
-                    "clarity & structure": <score 1-5>
-                }}
-            }}
-            ```
-        """,
+                   Return the response exactly as follows (expand the array according to the number of results), no extra commentary:
+                   TERMINATE:
+                   ```json
+                   {{
+                       "result_1": {{
+                           "completeness": <score 1-5>,
+                           "relevance": <score 1-5>,
+                           "accuracy": <score 1-5>,
+                           "usefulness": <score 1-5>
+                       }},
+                       "result_2": {{
+                           "completeness": <score 1-5>,
+                           "relevance": <score 1-5>,
+                           "accuracy": <score 1-5>,
+                           "usefulness": <score 1-5>
+                       }}
+                   }}
+                   ```
+               """,
     )
 
     return judge
