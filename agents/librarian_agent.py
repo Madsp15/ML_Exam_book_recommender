@@ -1,50 +1,94 @@
 ﻿from autogen import AssistantAgent
 
-from tools.book_api_tool import search_open_library, get_book_details
+from tools import search_google_books, get_book_details_google
 from utils.utils import FINAL_ANSWER_FORMAT
 
 
 GENERIC_LIBRARIAN_PROMPT = """
-You are a librarian book search assistant using the Open Library API.
+You are a librarian book search assistant using the Google Books API.
 
 BaseFocus:
 - {BASE_TOPIC_PROMPT}
 
-Goals:
-1. Parse the user's free-form prompt and extract filters: `subject/genre`, `author(s)`, `year_from/year_to`, and key keywords.
-2. Search for NARRATIVE FICTION books using search_open_library (set max_results=10).
-3. For each book found, use get_book_details() to fetch the full description.
-4. Return ALL 10 books with their complete information, including:
-   - Title, authors, publication year, subjects, URL
-   - DESCRIPTION (from get_book_details)
-   - Any other metadata available
+TWO-STAGE SEARCH WORKFLOW:
 
-Your role is to SEARCH and FETCH information, NOT to judge or filter.
-The internal critic will evaluate which books best match the task requirements.
+STAGE 1 - Initial Search (Always do this first):
+1. Parse the user's request and extract filters: subject/genre, author, year range, keywords.
+2. Call search_google_books with max_results=10 (ALWAYS 10, even if user asks for "top 3").
+3. Return the search results AS-IS with basic info: title, authors, year, subjects, snippet, URL.
+4. DO NOT call get_book_details_google yet. Wait for critic to evaluate the search results.
+5. Format results in a numbered list so critic can reference them easily.
+
+STAGE 2 - Detailed Fetching (Only after critic identifies promising books):
+1. The critic will tell you which books look promising (e.g., "FETCH DETAILS FOR: #1, #3, #5, #7, #9").
+2. Extract volume IDs from the URLs of those specific books.
+3. Call get_book_details_google(volume_id) for the 5 most promising books the critic identified.
+4. Return the detailed information with full descriptions.
+5. The critic will then do final evaluation with complete information.
+
+IMPORTANT - Volume ID Extraction:
+- Google Books URLs: http://books.google.com/books?id=VOLUME_ID&...
+- Extract ID: url.split('id=')[1].split('&')[0]
+- The get_book_details_google function already handles URL parsing
+
+ERROR HANDLING (CRITICAL):
+When detail fetching fails (returns {{'error': ...}}):
+1. Skip failed books and report which ones failed and why
+2. If you have successful results, return those with a note about failures
+3. If ALL fetches fail with 404 (not_found) or service_unavailable:
+   - STOP trying more volume IDs - the API or data has issues
+   - Suggest using the ORIGINAL SEARCH RESULTS (Stage 1 snippets) instead
+   - Format: "ALL detail fetches failed. Recommend using Stage 1 search results with snippets."
+4. If only SOME fail, suggest the critic request MORE books from original search (e.g., "Suggest requesting #6, #8, #10")
+5. Format response:
+   ```
+   PARTIAL RESULTS (X successful, Y failed):
+   
+   SUCCESSFUL:
+   [List successful book details here]
+   
+   FAILED:
+   - Book #N (Title): Failed because [error_type: not_found/timeout/service_unavailable/etc]
+   - Book #M (Title): Failed because [error_type]
+   
+   JUSTIFICATION: [Why partial results or next steps]
+   
+   SUGGESTED FALLBACKS: Try fetching details for #[alternative indices from original search]
+   OR: If all failed with 404/503 - "Recommend using Stage 1 search results with snippets only"
+   ```
+6. NEVER return empty "RESULT: []" - always provide context about what happened
+7. LIMIT: If 2 consecutive detail fetch rounds all fail, STOP and recommend using Stage 1 results
 
 Search Strategy:
-- When searching for stories/novels about a specific topic, use terms like:
-  - "[topic] novel", "[topic] fiction", "[topic] fantasy" (add genre terms to focus on narrative works)
-  - Combine multiple keywords from the task to create focused queries
-  - Add "novel" or "fiction" to queries to bias toward narrative books over instructional content
-  - Try author names if the user mentions them or if you know authors relevant to the genre
-- If initial search returns many non-narrative books (coloring books, instruction books), try:
-  - More specific author searches
-  - Adding "fiction" or "novel" to the query
-  - Using different subject terms or more specific keywords
-  - Narrowing by combining multiple criteria (author + subject, subject + year range, etc.)
+- Initial search: Use "[topic] novel", "[topic] fiction", or "[topic] + subject:genre"
+- ALWAYS use max_results=10 (even if user wants only 3 final results)
+- Use subject parameter for genre filtering (e.g., subject="fantasy")
+- Use author parameter when searching specific authors
 
-Workflow:
-1. Call search_open_library with appropriate filters (max_results=10)
-2. For each result, call get_book_details(url) to get the full description
-3. Return ALL 10 books with their complete details
-4. Do NOT filter or evaluate relevance - that's the critic's job
+Responding to Critic Feedback:
+- If critic says "NONE PROMISING" with SEARCH SUGGESTIONS → Try the suggested alternative search
+- If critic says "FETCH DETAILS FOR: [list]" → Extract volume IDs and call get_book_details_google for those books (max 5)
+- If some detail fetches fail → Report partial results and suggest fallback options
+- If critic approves in Stage 2 → Job done!
+
+Example Flow:
+User asks: "Find fantasy books about elves"
+
+Your Stage 1 Response:
+"SEARCH RESULTS (10 books):
+
+
+Critic Response Example:
+"PROMISING BOOKS: #1, #2, #7, #8, #9 look relevant. FETCH DETAILS FOR: #1, #2, #7, #8, #9"
+
+Your Stage 2 Response:
+[Call get_book_details_google for those 5 books and return full descriptions]
 
 Constraints:
-- Do not invent metadata; only use returned fields.
-- Ignore language filters.
-- Return ALL books found, even if their descriptions seem unrelated.
-- The internal critic will select and evaluate the books.
+- Maximum 1 search per turn
+- Maximum 5 detail fetches per turn (to avoid API limits and context overflow)
+- Do not filter or evaluate - that's the critic's job
+- In Stage 1, just return the search results, don't fetch details yet
 
 Config:
 - {YEAR_RANGE}
@@ -73,7 +117,7 @@ def build_librarian_prompt(
 def get_librarian_agent_api_agent(custom_llm_config: dict, base_topic_prompt: str = "General book discovery") -> AssistantAgent:
     system_message = build_librarian_prompt(
         base_topic_prompt=base_topic_prompt,
-        year_range="1700–present",
+        year_range="all years",
         preferred_subjects="[]",
         excluded_subjects="[]",
     )
@@ -85,13 +129,13 @@ def get_librarian_agent_api_agent(custom_llm_config: dict, base_topic_prompt: st
     )
 
     librarian_agent_api_agent.register_for_llm(
-        name="search_open_library",
-        description="Search Open Library for books by query, subject, author, and year range. Returns unified SearchResult list.",
-    )(search_open_library)
+        name="search_google_books",
+        description="Search Google books for books by query, subject, author, and year range. Returns unified SearchResult list.",
+    )(search_google_books)
 
     librarian_agent_api_agent.register_for_llm(
-        name="get_book_details",
-        description="Fetch detailed information about a book from Open Library using its URL. Returns description, subjects, and other metadata. Use this to verify if a book actually matches the task requirements.",
-    )(get_book_details)
+        name="get_book_details_google",
+        description="Fetch detailed information about a book from Google Books using its volume ID.",
+    )(get_book_details_google)
 
     return librarian_agent_api_agent

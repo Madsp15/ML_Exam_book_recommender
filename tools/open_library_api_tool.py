@@ -118,7 +118,7 @@ def search_open_library(
                     time.sleep(1.5)
         return None
 
-    # Subject-first search with synonyms
+    # Subject-first search with variants
     subject_variants: List[str] = []
     if subject:
         # Normalize and create variants
@@ -128,9 +128,6 @@ def search_open_library(
             base,
             base.title(),
         ]
-        # Add helpful synonyms for common genres (minimal set)
-        if base.lower() == "fantasy":
-            subject_variants.extend(["Fantasy fiction", "High fantasy", "Dark fantasy"])
 
     # Decide initial fetch size: larger pool to allow client-side filtering
     initial_fetch = max(30, max_results * 5)
@@ -150,8 +147,6 @@ def search_open_library(
     base_q = (query or "").strip()
     if base_q:
         keyword_queries = [base_q]
-        if base_q.lower() == "fantasy":
-            keyword_queries.extend(["fantasy novel", "fantasy fiction"])
     else:
         # If no query provided but subject existed and failed, try subject as keyword
         if subject:

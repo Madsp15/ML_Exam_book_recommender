@@ -28,6 +28,7 @@ class SearchResult:
     citations: Optional[int] = None
     isbn: Optional[str] = None
     subjects: Optional[List[str]] = None
+    volume_id: Optional[str] = None  # Google Books volume ID for reliable detail fetching
 
     def __str__(self) -> str:
         """Format the search result as a readable string"""

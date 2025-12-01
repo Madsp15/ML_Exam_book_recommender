@@ -10,6 +10,7 @@ load_dotenv()
 # API Keys
 GOOGLE_LLM_API_KEY = os.getenv("GOOGLE_LLM_API_KEY")
 GOOGLE_BOOKS_API_KEY = os.getenv("GOOGLE_BOOKS_API_KEY")
+BIG_BOOK_API_KEY = os.getenv("BIG_BOOK_API_KEY")
 
 # LLM Configuration
 LLM_CONFIG = {

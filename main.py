@@ -164,33 +164,58 @@ def main():
     for task in simple_tasks:
         logging.info(f"\n{'='*80}\nStarting task: {task}\n{'='*80}")
 
-        chat = user_proxy.initiate_chat(
-            manager,
-            message=f"TASK: {task}",
-            max_turns=20,  # Increased to allow for multiple tool calls
-            summary_method="reflection_with_llm",
-        )
+        try:
+            chat = user_proxy.initiate_chat(
+                manager,
+                message=f"TASK: {task}",
+                max_turns=20,  # Increased to allow for multiple tool calls
+                summary_method="reflection_with_llm",
+            )
 
-        # Extract the final approved result from internal critic
-        librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
+            # Extract the final approved result from internal critic
+            librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
 
-        # Extract critic's evaluation
-        critic_evaluation = None
-        for msg in reversed(chat.chat_history):
-            if msg.get("name") == "internal_critic" and "OK:" in (msg.get("content") or ""):
-                critic_evaluation = msg.get("content")
-                break
+            # Extract critic's evaluation
+            critic_evaluation = None
+            for msg in reversed(chat.chat_history):
+                if msg.get("name") == "internal_critic" and "OK:" in (msg.get("content") or ""):
+                    critic_evaluation = msg.get("content")
+                    break
 
-        logging.info(f"\n{'='*80}\nLibrarian Result:\n{librarian_result}\n")
-        logging.info(f"Critic Evaluation:\n{critic_evaluation}\n{'='*80}\n")
+            logging.info(f"\n{'='*80}\nLibrarian Result:\n{librarian_result}\n")
+            logging.info(f"Critic Evaluation:\n{critic_evaluation}\n{'='*80}\n")
 
-        results.append(
-            {
-                "task": task,
-                "librarian_result": librarian_result,
-                "critic_evaluation": critic_evaluation,
-            }
-        )
+            results.append(
+                {
+                    "task": task,
+                    "librarian_result": librarian_result,
+                    "critic_evaluation": critic_evaluation,
+                }
+            )
+        except TypeError as e:
+            error_msg = f"Gemini API error (TypeError): {str(e)}"
+            logging.error(f"\n{'='*80}\nError processing task: {error_msg}\n{'='*80}\n")
+            results.append(
+                {
+                    "task": task,
+                    "librarian_result": None,
+                    "critic_evaluation": None,
+                    "error": error_msg,
+                }
+            )
+            continue
+        except Exception as e:
+            error_msg = f"Unexpected error: {type(e).__name__}: {str(e)}"
+            logging.error(f"\n{'='*80}\nError processing task: {error_msg}\n{'='*80}\n")
+            results.append(
+                {
+                    "task": task,
+                    "librarian_result": None,
+                    "critic_evaluation": None,
+                    "error": error_msg,
+                }
+            )
+            continue
 
     save_results(results)
 
