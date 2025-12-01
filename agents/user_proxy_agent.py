@@ -1,7 +1,7 @@
 ﻿from autogen import UserProxyAgent
 from autogen.coding import DockerCommandLineCodeExecutor
 
-from tools import search_open_library, get_book_details, search_google_books, get_book_details_google
+from tools import search_google_books, get_book_details_google
 
 
 def get_user_proxy(executor: DockerCommandLineCodeExecutor) -> UserProxyAgent:

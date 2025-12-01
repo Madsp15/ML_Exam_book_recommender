@@ -64,39 +64,51 @@ STAGE 1.5 - ERROR RECOVERY (When librarian reports PARTIAL RESULTS or FAILED det
 
 Your job:
 1. Check how many books were successfully fetched vs failed
-2. If 3+ successful books, proceed to STAGE 2 evaluation with those
-3. If fewer than 3 successful, check if librarian recommends using Stage 1 results
-4. If all fetches failed with 404/503 errors, accept Stage 1 search results as final
+2. Check for error types: circuit_breaker_open, service_unavailable, not_found, timeout
+3. If circuit breaker is open OR all fetches failed with 503/unavailable -> IMMEDIATELY fall back to Stage 1
+4. If 3+ successful books with VALIDATED volume IDs, proceed to STAGE 2
+5. Check for MISMATCHES - if librarian reports volume ID/title mismatches, those books are INVALID
 
 Respond with ONE of:
 
-A) If 3+ successful detail fetches:
+A) If 3+ successful and VALIDATED detail fetches (no mismatches):
 ```
-ACKNOWLEDGED: Received [N] successful books, proceeding to evaluation.
+ACKNOWLEDGED: Received [N] successful and validated books, proceeding to evaluation.
 ```
 Then immediately evaluate those books as in STAGE 2.
 
-B) If fewer than 3 successful AND librarian suggests using Stage 1 results:
+B) If fewer than 3 successful OR circuit breaker open OR all service_unavailable:
 ```
-ACKNOWLEDGED: API detail fetching failed. Using Stage 1 search results with snippets.
+ACKNOWLEDGED: API detail fetching failed [reason: circuit breaker/service unavailable/too many failures]. Using Stage 1 search results with snippets.
 
 OK: Selecting top 3 from initial search results based on titles and snippets.
 
 RESULT:
 TOP 3 SELECTED BOOKS:
-1. Title: [title from search results]
-   Authors: [authors]
-   Year: [year]
-   URL: [url]
-   Snippet: [relevant snippet]
+1. Title: [EXACT title from Stage 1 search results]
+   Authors: [EXACT authors from Stage 1]
+   Year: [EXACT year from Stage 1]
+   URL: [EXACT url from Stage 1]
+   Snippet: [relevant snippet from Stage 1]
    Justification: <why this looks most relevant based on snippet>
 
-2. [same format]
+2. [same format - use EXACT data from original search]
 
-3. [same format]
+3. [same format - use EXACT data from original search]
+
+TERMINATE.
 ```
+IMPORTANT: Copy titles, authors, years, and URLs EXACTLY as they appeared in the librarian's Stage 1 "SEARCH RESULTS" response.
 
-C) If fewer than 3 successful AND no Stage 1 fallback mentioned:
+C) If some successful but WITH MISMATCHES reported by librarian:
+```
+VALIDATION FAILED: Librarian reported volume ID mismatches. Cannot trust these results.
+
+Fall back to Stage 1 search results with snippets only.
+```
+Then proceed as in option B above.
+
+D) If fewer than 3 successful AND no circuit breaker AND some books still available:
 ```
 INSUFFICIENT RESULTS: Only [N] books succeeded, need at least 3.
 

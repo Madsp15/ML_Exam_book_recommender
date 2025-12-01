@@ -33,31 +33,49 @@ IMPORTANT - Volume ID Extraction:
 
 ERROR HANDLING (CRITICAL):
 When detail fetching fails (returns {{'error': ...}}):
-1. Skip failed books and report which ones failed and why
-2. If you have successful results, return those with a note about failures
-3. If ALL fetches fail with 404 (not_found) or service_unavailable:
-   - STOP trying more volume IDs - the API or data has issues
-   - Suggest using the ORIGINAL SEARCH RESULTS (Stage 1 snippets) instead
-   - Format: "ALL detail fetches failed. Recommend using Stage 1 search results with snippets."
-4. If only SOME fail, suggest the critic request MORE books from original search (e.g., "Suggest requesting #6, #8, #10")
-5. Format response:
+1. **Track Volume ID Mappings**: When reporting results, cross-reference volume IDs from Stage 1 with returned details
+   - If volume ID in response doesn't match requested ID -> Report MISMATCH
+   - If title in detailed response doesn't match title from Stage 1 search -> Report MISMATCH
+   
+2. **Circuit Breaker Detection**: If error_type is 'circuit_breaker_open':
+   - IMMEDIATELY stop all detail fetch attempts
+   - Fall back to Stage 1 search results with snippets
+   - Format: "API CIRCUIT BREAKER ACTIVE. Using Stage 1 search results with snippets only."
+   
+3. **Partial Results Handling**:
+   - Skip failed books and report which ones failed and why
+   - If you have successful results, return those with a note about failures
+   - VALIDATE: Check if returned book title matches expected title from Stage 1
+   
+4. **Complete Failure Handling**:
+   - If ALL fetches fail with 404/503/circuit_breaker_open:
+     * STOP trying more volume IDs - the API has issues
+     * Suggest using ORIGINAL SEARCH RESULTS (Stage 1 snippets) instead
+     * Format: "ALL detail fetches failed. Recommend using Stage 1 search results with snippets."
+   
+5. **Format Response**:
    ```
    PARTIAL RESULTS (X successful, Y failed):
    
    SUCCESSFUL:
-   [List successful book details here]
+   [List successful book details here with validation note]
    
    FAILED:
-   - Book #N (Title): Failed because [error_type: not_found/timeout/service_unavailable/etc]
+   - Book #N (Title): Failed because [error_type: not_found/timeout/service_unavailable/circuit_breaker_open/etc]
    - Book #M (Title): Failed because [error_type]
+   
+   MISMATCHES (if any):
+   - Volume ID [ID] expected 'Title A' but got 'Title B'
    
    JUSTIFICATION: [Why partial results or next steps]
    
-   SUGGESTED FALLBACKS: Try fetching details for #[alternative indices from original search]
-   OR: If all failed with 404/503 - "Recommend using Stage 1 search results with snippets only"
+   SUGGESTED FALLBACKS: 
+   - Try fetching details for #[alternative indices from original search]
+   - OR if all failed/circuit breaker: "Recommend using Stage 1 search results with snippets only"
    ```
+   
 6. NEVER return empty "RESULT: []" - always provide context about what happened
-7. LIMIT: If 2 consecutive detail fetch rounds all fail, STOP and recommend using Stage 1 results
+7. LIMIT: If 2 consecutive detail fetch rounds all fail OR circuit breaker activates, STOP and recommend using Stage 1 results
 
 Search Strategy:
 - Initial search: Use "[topic] novel", "[topic] fiction", or "[topic] + subject:genre"
