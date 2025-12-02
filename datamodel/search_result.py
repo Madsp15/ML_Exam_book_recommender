@@ -29,6 +29,7 @@ class SearchResult:
     isbn: Optional[str] = None
     subjects: Optional[List[str]] = None
     volume_id: Optional[str] = None  # Google Books volume ID for reliable detail fetching
+    relevance_score: Optional[float] = None  # Semantic relevance score (0-100)
 
     def __str__(self) -> str:
         """Format the search result as a readable string"""
@@ -46,6 +47,18 @@ class SearchResult:
 
         if self.subjects and len(self.subjects) > 0:
             result += f"Subjects: {', '.join(self.subjects[:5])}\n"
+
+        if self.relevance_score is not None:
+            # Add relevance label (updated thresholds for new scoring formula)
+            if self.relevance_score >= 80:
+                label = "HIGHLY relevant"
+            elif self.relevance_score >= 65:
+                label = "MODERATELY relevant"
+            elif self.relevance_score >= 50:
+                label = "SOMEWHAT relevant"
+            else:
+                label = "LOW relevance"
+            result += f"Relevance Score: {self.relevance_score} ({label})\n"
 
         result += f"URL: {self.url}\n"
         result += f"Description: {self.snippet}\n"

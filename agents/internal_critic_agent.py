@@ -1,6 +1,9 @@
 ﻿from autogen import AssistantAgent
+import json
+import logging
 
 from utils.utils import EVALUATION_CRITERIA
+from utils.semantic_scorer import calculate_relevance_scores
 
 
 def get_system_message(terminate_conversation: bool) -> str:
@@ -28,7 +31,7 @@ STAGE 1 - INITIAL SCREENING (When librarian provides SEARCH RESULTS with titles/
 
 Your job:
 1. Quickly scan titles, snippets, and subjects
-2. Identify books that look like narrative fiction
+2. Identify books that look like narrative fiction matching the request
 3. Filter out obvious non-matches (instruction books, non-fiction, etc.)
 4. Select 5 most promising books that MIGHT match the requirements
 
@@ -41,7 +44,7 @@ PROMISING BOOKS (for detailed review):
 2. [Book Title] at index #Y - Rationale: <why relevant>
 3. [Book Title] at index #Z - Rationale: <why relevant>
 4. [Book Title] at index #A - Rationale: <why relevant>
-5. [Book Title] at index #B - Rationale: <why relevant>
+5. [Book Title] at index #B - Score: [B.B] - Rationale: <why relevant>
 
 FETCH DETAILS FOR: #X, #Y, #Z, #A, #B
 ```
@@ -118,19 +121,26 @@ Or if no fallbacks available: Request alternative books #[next indices from orig
 
 ---
 
-STAGE 2 - FINAL EVALUATION (When librarian provides DETAILED information with full descriptions):
+STAGE 2 - SCORE AND EVALUATE (When librarian provides DETAILED information with full descriptions):
 
 Your job:
-1. Read each full description carefully
-2. Apply AUTOMATIC EXCLUSIONS rigorously
-3. Match descriptions against SPECIFIC task requirements
-4. Select the TOP 3 books that ACTUALLY match (not "close enough")
+1. Call score_books_by_relevance to calculate semantic relevance scores for the books
+2. Review the scores alongside full descriptions:
+   - Scores ≥80: HIGHLY relevant (excellent semantic match)
+   - Scores 65-79: MODERATELY relevant (good match)
+   - Scores 50-64: SOMEWHAT relevant (weak match)
+   - Scores <50: LOW relevance (poor match)
+3. Apply AUTOMATIC EXCLUSIONS rigorously
+4. Match descriptions against SPECIFIC task requirements
+5. Select the TOP 3 books that ACTUALLY match (not "close enough")
 
 Respond with ONE of:
 
 A) If 3+ books match requirements:
 ```
-OK: <short justification for your top 3 selections>
+[First, call score_books_by_relevance with the user's original prompt and the book details]
+
+OK: <short justification for your top 3 selections, mentioning relevance scores>
 
 RESULT:
 TOP 3 SELECTED BOOKS:
@@ -138,8 +148,9 @@ TOP 3 SELECTED BOOKS:
    Authors: [authors]
    Year: [year]
    URL: [url]
+   Relevance Score: [score from scoring tool]
    Description: [snippet from full description showing relevance]
-   Justification: <why this matches requirements based on FULL description>
+   Justification: <why this matches requirements based on FULL description and semantic score>
    
 2. [same format]
 
@@ -169,6 +180,62 @@ Rules:
     return base_message
 
 
+def score_books_by_relevance(user_prompt: str, books_json: str) -> str:
+    """
+    Calculate semantic relevance scores for books against user prompt.
+
+    Args:
+        user_prompt: Original user query/requirements
+        books_json: JSON string containing list of books with title, description, authors, subjects
+
+    Returns:
+        Formatted string with books ranked by relevance score (0-100)
+    """
+    try:
+        books = json.loads(books_json)
+
+        if not books:
+            return "ERROR: No books provided for scoring"
+
+        logging.info(f"Scoring {len(books)} books for prompt: {user_prompt[:100]}...")
+
+        # Calculate scores
+        scored_books = calculate_relevance_scores(user_prompt, books)
+
+        # Format output
+        result = [f"SEMANTIC RELEVANCE SCORES (0-100 scale):"]
+        result.append("")
+
+        for i, book in enumerate(scored_books, 1):
+            score = book.get('relevance_score', 0)
+            title = book.get('title', 'Unknown')
+
+            # Categorize relevance with updated thresholds
+            if score >= 80:
+                label = "HIGHLY relevant"
+            elif score >= 65:
+                label = "MODERATELY relevant"
+            elif score >= 50:
+                label = "SOMEWHAT relevant"
+            else:
+                label = "LOW relevance"
+
+            result.append(f"{i}. Score: {score} - {title}")
+            result.append(f"   → {label}")
+            result.append("")
+
+        result.append("Note: Scores ≥80 indicate excellent match, 65-79 good match, 50-64 weak match, <50 poor match")
+
+        return "\n".join(result)
+
+    except json.JSONDecodeError as e:
+        logging.error(f"Failed to parse books JSON: {e}")
+        return f"ERROR: Invalid JSON format - {str(e)}"
+    except Exception as e:
+        logging.error(f"Error scoring books: {e}")
+        return f"ERROR: Failed to score books - {str(e)}"
+
+
 def get_internal_critic_agent(
     llm_config: dict, terminate_conversation: bool = False
 ) -> AssistantAgent:
@@ -179,5 +246,11 @@ def get_internal_critic_agent(
             terminate_conversation=terminate_conversation
         ),
     )
+
+    # Register semantic scoring tool
+    internal_critic.register_for_llm(
+        name="score_books_by_relevance",
+        description="Calculate semantic relevance scores (0-100) for books against the user's original query. Use this in Stage 2 after receiving detailed book information. Provide user_prompt (string) and books_json (JSON string with book details). Returns books ranked by score.",
+    )(score_books_by_relevance)
 
     return internal_critic

@@ -1,7 +1,9 @@
 ﻿from autogen import AssistantAgent
+import logging
 
 from tools import search_google_books, get_book_details_google
 from utils.utils import FINAL_ANSWER_FORMAT
+from utils.semantic_scorer import calculate_relevance_scores
 
 
 GENERIC_LIBRARIAN_PROMPT = """
@@ -90,6 +92,21 @@ User asks: "Find fantasy books about elves"
 Your Stage 1 Response:
 "SEARCH RESULTS (10 books):
 
+1. Title: The Elvish Chronicles
+   Authors: Jane Smith
+   Year: 2015
+   Subjects: Fiction, Fantasy, Elves
+   Snippet: A tale of ancient elves in Middle Kingdom...
+   URL: http://books.google.com/books?id=ABC123&
+   
+2. Title: Forest of the Fae
+   Authors: John Doe
+   Year: 2018
+   Subjects: Fiction, Fantasy
+   Snippet: Elven warriors defend their homeland...
+   URL: http://books.google.com/books?id=XYZ789&
+
+[... continue for all 10 results ...]"
 
 Critic Response Example:
 "PROMISING BOOKS: #1, #2, #7, #8, #9 look relevant. FETCH DETAILS FOR: #1, #2, #7, #8, #9"
@@ -125,6 +142,86 @@ def build_librarian_prompt(
         EXCLUDED_SUBJECTS=excluded_subjects,
         FINAL_ANSWER_FORMAT=FINAL_ANSWER_FORMAT,
     )
+
+
+# Store the current user query for semantic scoring
+_current_user_query = ""
+
+
+def set_current_query(query: str):
+    """Store the current user query for semantic scoring"""
+    global _current_user_query
+    _current_user_query = query
+    logging.info(f"Set current query for semantic scoring: {query[:100]}...")
+
+
+def search_google_books_with_scoring(
+    query: str,
+    year_from: int = None,
+    year_to: int = None,
+    max_results: int = 10,
+    author: str = None,
+    subject: str = None,
+):
+    """
+    Wrapper for search_google_books that automatically calculates semantic relevance scores.
+    Returns SearchResult objects with added relevance_score attribute.
+    """
+    # Call original search function
+    results = search_google_books(
+        query=query,
+        year_from=year_from,
+        year_to=year_to,
+        max_results=max_results,
+        author=author,
+        subject=subject,
+    )
+
+    if not results:
+        logging.warning("No results from Google Books search")
+        return results
+
+    # Get user query from context (use search query as fallback)
+    user_query = _current_user_query if _current_user_query else query
+
+    # Convert SearchResult objects to dicts for scoring
+    books_as_dicts = []
+    for result in results:
+        book_dict = {
+            "title": result.title,
+            "description": result.snippet,
+            "snippet": result.snippet,
+            "authors": result.authors,
+            "subjects": result.subjects or [],
+            "publication_year": result.publication_year,
+            "url": result.url,
+            "isbn": result.isbn,
+            "volume_id": result.volume_id,
+        }
+        books_as_dicts.append(book_dict)
+
+    # Calculate semantic scores
+    try:
+        logging.info(f"Calculating semantic scores for {len(books_as_dicts)} books...")
+        scored_books = calculate_relevance_scores(user_query, books_as_dicts)
+
+        # Add scores back to SearchResult objects
+        for i, result in enumerate(results):
+            if i < len(scored_books):
+                result.relevance_score = scored_books[i].get("relevance_score", 0)
+
+        # Sort by relevance score (highest first)
+        results.sort(key=lambda x: getattr(x, 'relevance_score', 0), reverse=True)
+
+        logging.info(f"Top 3 relevance scores: {[getattr(r, 'relevance_score', 0) for r in results[:3]]}")
+
+    except Exception as e:
+        logging.error(f"Failed to calculate semantic scores: {e}")
+        # Return results without scores if scoring fails
+        for result in results:
+            result.relevance_score = None
+
+    return results
 
 
 def get_librarian_agent_api_agent(custom_llm_config: dict, base_topic_prompt: str = "General book discovery") -> AssistantAgent:

@@ -4,7 +4,7 @@ import dotenv
 import logging
 import argparse
 from agents.internal_critic_agent import get_internal_critic_agent
-from agents.librarian_agent import get_librarian_agent_api_agent
+from agents.librarian_agent import get_librarian_agent_api_agent, set_current_query
 
 from agents.user_proxy_agent import get_user_proxy
 
@@ -163,6 +163,9 @@ def main():
     results = []
     for task in simple_tasks:
         logging.info(f"\n{'='*80}\nStarting task: {task}\n{'='*80}")
+
+        # Set current query for semantic scoring
+        set_current_query(task)
 
         try:
             chat = user_proxy.initiate_chat(
