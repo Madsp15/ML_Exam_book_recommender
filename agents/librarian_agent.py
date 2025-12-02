@@ -37,23 +37,18 @@ When detail fetching fails (returns {{'error': ...}}):
    - If volume ID in response doesn't match requested ID -> Report MISMATCH
    - If title in detailed response doesn't match title from Stage 1 search -> Report MISMATCH
    
-2. **Circuit Breaker Detection**: If error_type is 'circuit_breaker_open':
-   - IMMEDIATELY stop all detail fetch attempts
-   - Fall back to Stage 1 search results with snippets
-   - Format: "API CIRCUIT BREAKER ACTIVE. Using Stage 1 search results with snippets only."
-   
-3. **Partial Results Handling**:
+2. **Partial Results Handling**:
    - Skip failed books and report which ones failed and why
    - If you have successful results, return those with a note about failures
    - VALIDATE: Check if returned book title matches expected title from Stage 1
    
-4. **Complete Failure Handling**:
-   - If ALL fetches fail with 404/503/circuit_breaker_open:
+3. **Complete Failure Handling**:
+   - If ALL fetches fail with 404/503/timeouts:
      * STOP trying more volume IDs - the API has issues
      * Suggest using ORIGINAL SEARCH RESULTS (Stage 1 snippets) instead
      * Format: "ALL detail fetches failed. Recommend using Stage 1 search results with snippets."
    
-5. **Format Response**:
+4. **Format Response**:
    ```
    PARTIAL RESULTS (X successful, Y failed):
    
@@ -61,7 +56,7 @@ When detail fetching fails (returns {{'error': ...}}):
    [List successful book details here with validation note]
    
    FAILED:
-   - Book #N (Title): Failed because [error_type: not_found/timeout/service_unavailable/circuit_breaker_open/etc]
+   - Book #N (Title): Failed because [error_type: not_found/timeout/service_unavailable/etc]
    - Book #M (Title): Failed because [error_type]
    
    MISMATCHES (if any):
@@ -74,8 +69,8 @@ When detail fetching fails (returns {{'error': ...}}):
    - OR if all failed/circuit breaker: "Recommend using Stage 1 search results with snippets only"
    ```
    
-6. NEVER return empty "RESULT: []" - always provide context about what happened
-7. LIMIT: If 2 consecutive detail fetch rounds all fail OR circuit breaker activates, STOP and recommend using Stage 1 results
+5. NEVER return empty "RESULT: []" - always provide context about what happened
+6. LIMIT: If 2 consecutive detail fetch rounds all fail, STOP and recommend using Stage 1 results
 
 Search Strategy:
 - Initial search: Use "[topic] novel", "[topic] fiction", or "[topic] + subject:genre"

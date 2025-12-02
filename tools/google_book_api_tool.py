@@ -14,11 +14,12 @@ GOOGLE_BOOKS_SEARCH_URL = f"{GOOGLE_BOOKS_BASE_URL}/volumes"
 _last_call_time = 0
 _min_call_interval = 0.5
 
-# Circuit breaker for consecutive API failures
-_consecutive_failures = 0
-_circuit_breaker_threshold = 5
-_circuit_breaker_open = False
-_circuit_breaker_reset_time = None
+
+def _sanitize_url(url_or_message: str) -> str:
+    """Remove API keys from URLs in error messages for security"""
+    import re
+    # Replace API key with [REDACTED] in URLs
+    return re.sub(r'key=[^&\s]+', 'key=[REDACTED]', str(url_or_message))
 
 
 def _apply_rate_limit():
@@ -33,44 +34,6 @@ def _apply_rate_limit():
 
     _last_call_time = time.time()
 
-
-def _check_circuit_breaker() -> bool:
-    """Check if circuit breaker is open (too many consecutive failures)"""
-    global _circuit_breaker_open, _circuit_breaker_reset_time
-
-    if not _circuit_breaker_open:
-        return False
-
-    # Check if enough time has passed to reset the circuit breaker (60 seconds)
-    if _circuit_breaker_reset_time is not None and time.time() > _circuit_breaker_reset_time:
-        logging.info("Circuit breaker reset - attempting API calls again")
-        _circuit_breaker_open = False
-        _circuit_breaker_reset_time = None
-        return False
-
-    return True
-
-
-def _record_api_success():
-    """Record successful API call"""
-    global _consecutive_failures, _circuit_breaker_open, _circuit_breaker_reset_time
-    _consecutive_failures = 0
-    _circuit_breaker_open = False
-    _circuit_breaker_reset_time = None
-
-
-def _record_api_failure():
-    """Record failed API call and check if circuit breaker should open"""
-    global _consecutive_failures, _circuit_breaker_open, _circuit_breaker_reset_time
-    _consecutive_failures += 1
-
-    if _consecutive_failures >= _circuit_breaker_threshold:
-        _circuit_breaker_open = True
-        _circuit_breaker_reset_time = time.time() + 60  # Reset after 60 seconds
-        logging.warning(
-            f"Circuit breaker OPENED after {_consecutive_failures} consecutive failures. "
-            f"Will retry after 60 seconds."
-        )
 
 
 def _extract_volume_id(item: dict = None, url: str = None) -> str | None:
@@ -264,7 +227,7 @@ def search_google_books(
             resp.raise_for_status()
             return resp.json()
         except requests.exceptions.RequestException as e:
-            logging.error("Google Books API error on attempt %d: %s", attempt, str(e))
+            logging.error("Google Books API error on attempt %d: %s", attempt, _sanitize_url(str(e)))
             if attempt < 3:
                 sleep_time = 1.5 * attempt  # Exponential backoff
                 time.sleep(sleep_time)
@@ -303,14 +266,6 @@ def get_book_details_google(volume_id: str) -> dict:
         Dictionary with detailed book information including description, subjects, etc.
         Returns error dict with 'error' and 'error_type' if the request fails.
     """
-    # Check circuit breaker first
-    if _check_circuit_breaker():
-        logging.warning(f"Circuit breaker OPEN - skipping API call for {volume_id}")
-        return {
-            "error": "Google Books API circuit breaker is open due to consecutive failures",
-            "error_type": "circuit_breaker_open",
-            "volume_id": volume_id
-        }
 
     # Apply rate limiting
     _apply_rate_limit()
@@ -349,6 +304,7 @@ def get_book_details_google(volume_id: str) -> dict:
     # Retry logic with exponential backoff
     max_retries = 3
     for attempt in range(1, max_retries + 1):
+        status_code = None  # Initialize to None for each attempt
         try:
             resp = requests.get(api_url, params=params, timeout=15)
             status_code = resp.status_code
@@ -393,13 +349,15 @@ def get_book_details_google(volume_id: str) -> dict:
                 result["averageRating"] = volume_info.get("averageRating")
                 result["ratingsCount"] = volume_info.get("ratingsCount")
 
-            # Record success and log mapping
-            _record_api_success()
+            # Log successful fetch
             logging.info(f"Successfully fetched details for volume {volume_id} -> '{result['title']}' by {result['authors']}")
             return result
 
         except requests.exceptions.HTTPError as e:
-            status_code = e.response.status_code if e.response else None
+            # Try to extract status code from response, fallback to status_code from before raise_for_status
+            if e.response is not None:
+                status_code = e.response.status_code
+            # If status_code is still None, this is unexpected
 
             # 404 means the book doesn't exist - don't retry
             if status_code == 404:
@@ -407,7 +365,8 @@ def get_book_details_google(volume_id: str) -> dict:
                 return {
                     "error": f"Book not found for volume ID: {volume_id}",
                     "error_type": "not_found",
-                    "volume_id": volume_id
+                    "volume_id": volume_id,
+                    "status_code": 404
                 }
 
             # 503 Service Unavailable - retry with longer backoff
@@ -423,21 +382,20 @@ def get_book_details_google(volume_id: str) -> dict:
                     continue
                 else:
                     logging.error(f"Service unavailable (503) for {volume_id} after {max_retries} attempts")
-                    _record_api_failure()
                     return {
                         "error": f"Google Books API service unavailable after {max_retries} attempts",
                         "error_type": "service_unavailable",
                         "volume_id": volume_id,
-                        "status_code": status_code
+                        "status_code": 503
                     }
 
-            # Other HTTP errors
+            # Other HTTP errors - sanitize the error message
+            sanitized_error = _sanitize_url(str(e))
             logging.error(
-                f"HTTP error {status_code} fetching details for {volume_id}: {str(e)}"
+                f"HTTP error {status_code} fetching details for {volume_id}: {sanitized_error}"
             )
-            _record_api_failure()
             return {
-                "error": f"HTTP {status_code} error: {str(e)}",
+                "error": f"HTTP {status_code} error: {sanitized_error}",
                 "error_type": "http_error",
                 "volume_id": volume_id,
                 "status_code": status_code
@@ -454,7 +412,6 @@ def get_book_details_google(volume_id: str) -> dict:
                 continue
             else:
                 logging.error(f"Timeout fetching details for {volume_id} after {max_retries} attempts")
-                _record_api_failure()
                 return {
                     "error": f"Request timeout after {max_retries} attempts",
                     "error_type": "timeout",
@@ -462,16 +419,15 @@ def get_book_details_google(volume_id: str) -> dict:
                 }
 
         except requests.exceptions.RequestException as e:
-            logging.error(f"Request error fetching details for {volume_id}: {str(e)}")
-            _record_api_failure()
+            sanitized_error = _sanitize_url(str(e))
+            logging.error(f"Request error fetching details for {volume_id}: {sanitized_error}")
             return {
-                "error": f"Request failed: {str(e)}",
+                "error": f"Request failed: {sanitized_error}",
                 "error_type": "request_error",
                 "volume_id": volume_id
             }
 
     # If we exhausted all retries
-    _record_api_failure()
     return {
         "error": f"Failed to fetch book details after {max_retries} attempts",
         "error_type": "max_retries_exceeded",
