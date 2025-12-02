@@ -10,3 +10,6 @@ jsonschema-specifications==2025.9.1
 sentence-transformers>=2.2.2
 torch>=2.0.0
 numpy>=1.24.0
+streamlit>=1.28.0
+cerebras_cloud_sdk>=1.0.0
+mistralai>=0.1.0

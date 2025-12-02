@@ -2,8 +2,11 @@
 import json
 from pathlib import Path
 from typing import List, Literal
+import logging
 
 from autogen import ChatResult
+
+logger = logging.getLogger(__name__)
 
 
 FINAL_ANSWER_FORMAT = """
@@ -43,10 +46,45 @@ When evaluating, consider:
 """
 
 
+def _patch_mistral_client():
+    """Monkey-patch ConversableAgent to fix 'user after tool' message ordering for Mistral."""
+    try:
+        from autogen import ConversableAgent
+
+        original_generate_oai_reply = ConversableAgent.generate_oai_reply
+
+        def patched_generate_oai_reply(self, messages=None, sender=None, config=None):
+            """Patched generate_oai_reply that transforms messages for Mistral compatibility."""
+            if messages:
+                transformed = []
+                for i, msg in enumerate(messages):
+                    if i > 0 and transformed[-1].get("role") == "tool" and msg.get("role") == "user":
+                        # Convert user to assistant after tool
+                        msg_copy = msg.copy()
+                        msg_copy["role"] = "assistant"
+                        logger.debug(f"Transformed message role from 'user' to 'assistant' after tool message")
+                        transformed.append(msg_copy)
+                    else:
+                        transformed.append(msg)
+                messages = transformed
+
+            return original_generate_oai_reply(self, messages=messages, sender=sender, config=config)
+
+        ConversableAgent.generate_oai_reply = patched_generate_oai_reply
+        logger.info("Successfully patched ConversableAgent for message transformation")
+    except ImportError as e:
+        logger.warning(f"Could not import ConversableAgent - skipping patch: {e}")
+    except Exception as e:
+        logger.error(f"Error patching ConversableAgent: {e}")
+
+
 def get_llm_config(
     llm_provider: Literal["mistral", "google", "cerebras"], api_key: str
 ):
     if llm_provider == "mistral":
+        # Apply monkey-patch for Mistral client
+        _patch_mistral_client()
+
         return {
             "config_list": [
                 {

@@ -107,48 +107,67 @@ def speaker_selection(last_speaker, groupchat):
     last_message = messages[-1] if messages else {}
     last_message_content = last_message.get("content", "") if messages else ""
 
+    # Get agents from the groupchat to avoid referencing global variables
+    agents_dict = {agent.name: agent for agent in groupchat.agents}
+    librarian = agents_dict.get("librarianAgentApiAgent")
+    critic = agents_dict.get("internal_critic")
+    proxy = agents_dict.get("user_proxy")
+
     # kick-off: user_proxy starts with TASK, librarian agent responds
-    if last_speaker is user_proxy and last_message_content.strip().startswith("TASK:"):
-        return librarian_agent
+    if last_speaker is proxy and last_message_content.strip().startswith("TASK:"):
+        return librarian
 
     # After user_proxy speaks (e.g., tool execution result)
-    if last_speaker is user_proxy:
+    if last_speaker is proxy:
         # If it's a tool result, librarian should process it
         if last_message.get("role") == "tool":
-            return librarian_agent
+            return librarian
         else:
-            return internal_critic
+            return critic
 
     # After librarian speaks
-    if last_speaker is librarian_agent:
+    if last_speaker is librarian:
         # If librarian made a tool call, user_proxy executes it
         if "tool_calls" in last_message:
-            return user_proxy
+            return proxy
         else:
             # No tool call, librarian returned filtered books - send to critic
-            return internal_critic
+            return critic
 
     # After critic speaks
-    if last_speaker is internal_critic:
+    if last_speaker is critic:
         if "OK:" in last_message_content:
             # Critic approved, conversation can end
             return None
         else:
             # Critic wants changes, send back to librarian
-            return librarian_agent
+            return librarian
 
     # Default fallback
-    return librarian_agent
+    return librarian
 
 
-def main():
+def process_single_task(task: str, llm_config: dict, librarian_agent, internal_critic, user_proxy):
+    """
+    Process a single task through the agent system.
+
+    Args:
+        task: The book search task/prompt
+        llm_config: LLM configuration dict
+        librarian_agent: The librarian agent instance
+        internal_critic: The internal critic agent instance
+        user_proxy: The user proxy agent instance
+
+    Returns:
+        dict with keys: task, librarian_result, critic_evaluation, chat_history, error
+    """
     def should_terminate(msg) -> bool:
         # Terminate when internal critic has approved with OK:
         return has_critic_approval(group.messages)
 
     group = GroupChat(
         agents=[user_proxy, librarian_agent, internal_critic],
-        max_round=20,  # Increased to allow multiple tool calls by librarian
+        max_round=20,
         speaker_selection_method=speaker_selection,
         allow_repeat_speaker=False,
     )
@@ -156,69 +175,70 @@ def main():
     manager = GroupChatManager(
         name="main_manager",
         groupchat=group,
-        llm_config=LLM_CONFIG,
+        llm_config=llm_config,
         is_termination_msg=should_terminate,
     )
 
+    logging.info(f"\n{'='*80}\nStarting task: {task}\n{'='*80}")
+
+    # Set current query for semantic scoring
+    set_current_query(task)
+
+    try:
+        chat = user_proxy.initiate_chat(
+            manager,
+            message=f"TASK: {task}",
+            max_turns=20,
+            summary_method="reflection_with_llm",
+        )
+
+        # Extract the final approved result from internal critic
+        librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
+
+        # Extract critic's evaluation
+        critic_evaluation = None
+        for msg in reversed(chat.chat_history):
+            if msg.get("name") == "internal_critic" and "OK:" in (msg.get("content") or ""):
+                critic_evaluation = msg.get("content")
+                break
+
+        logging.info(f"\n{'='*80}\nLibrarian Result:\n{librarian_result}\n")
+        logging.info(f"Critic Evaluation:\n{critic_evaluation}\n{'='*80}\n")
+
+        return {
+            "task": task,
+            "librarian_result": librarian_result,
+            "critic_evaluation": critic_evaluation,
+            "chat_history": chat.chat_history,
+            "error": None,
+        }
+    except TypeError as e:
+        error_msg = f"Gemini API error (TypeError): {str(e)}"
+        logging.error(f"\n{'='*80}\nError processing task: {error_msg}\n{'='*80}\n")
+        return {
+            "task": task,
+            "librarian_result": None,
+            "critic_evaluation": None,
+            "chat_history": None,
+            "error": error_msg,
+        }
+    except Exception as e:
+        error_msg = f"Unexpected error: {type(e).__name__}: {str(e)}"
+        logging.error(f"\n{'='*80}\nError processing task: {error_msg}\n{'='*80}\n")
+        return {
+            "task": task,
+            "librarian_result": None,
+            "critic_evaluation": None,
+            "chat_history": None,
+            "error": error_msg,
+        }
+
+
+def main():
     results = []
     for task in simple_tasks:
-        logging.info(f"\n{'='*80}\nStarting task: {task}\n{'='*80}")
-
-        # Set current query for semantic scoring
-        set_current_query(task)
-
-        try:
-            chat = user_proxy.initiate_chat(
-                manager,
-                message=f"TASK: {task}",
-                max_turns=20,  # Increased to allow for multiple tool calls
-                summary_method="reflection_with_llm",
-            )
-
-            # Extract the final approved result from internal critic
-            librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
-
-            # Extract critic's evaluation
-            critic_evaluation = None
-            for msg in reversed(chat.chat_history):
-                if msg.get("name") == "internal_critic" and "OK:" in (msg.get("content") or ""):
-                    critic_evaluation = msg.get("content")
-                    break
-
-            logging.info(f"\n{'='*80}\nLibrarian Result:\n{librarian_result}\n")
-            logging.info(f"Critic Evaluation:\n{critic_evaluation}\n{'='*80}\n")
-
-            results.append(
-                {
-                    "task": task,
-                    "librarian_result": librarian_result,
-                    "critic_evaluation": critic_evaluation,
-                }
-            )
-        except TypeError as e:
-            error_msg = f"Gemini API error (TypeError): {str(e)}"
-            logging.error(f"\n{'='*80}\nError processing task: {error_msg}\n{'='*80}\n")
-            results.append(
-                {
-                    "task": task,
-                    "librarian_result": None,
-                    "critic_evaluation": None,
-                    "error": error_msg,
-                }
-            )
-            continue
-        except Exception as e:
-            error_msg = f"Unexpected error: {type(e).__name__}: {str(e)}"
-            logging.error(f"\n{'='*80}\nError processing task: {error_msg}\n{'='*80}\n")
-            results.append(
-                {
-                    "task": task,
-                    "librarian_result": None,
-                    "critic_evaluation": None,
-                    "error": error_msg,
-                }
-            )
-            continue
+        result = process_single_task(task, LLM_CONFIG, librarian_agent, internal_critic, user_proxy)
+        results.append(result)
 
     save_results(results)
 
