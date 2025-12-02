@@ -253,4 +253,8 @@ def get_internal_critic_agent(
         description="Calculate semantic relevance scores (0-100) for books against the user's original query. Use this in Stage 2 after receiving detailed book information. Provide user_prompt (string) and books_json (JSON string with book details). Returns books ranked by score.",
     )(score_books_by_relevance)
 
+    internal_critic.register_for_execution(
+        name="score_books_by_relevance"
+    )(score_books_by_relevance)
+
     return internal_critic

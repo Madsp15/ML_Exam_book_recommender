@@ -2,6 +2,7 @@
 from autogen.coding import DockerCommandLineCodeExecutor
 
 from tools import search_google_books, get_book_details_google
+from agents.internal_critic_agent import score_books_by_relevance
 
 
 def get_user_proxy(executor: DockerCommandLineCodeExecutor) -> UserProxyAgent:
@@ -27,5 +28,9 @@ def get_user_proxy(executor: DockerCommandLineCodeExecutor) -> UserProxyAgent:
     user_proxy.register_for_execution(
         name="get_book_details_google",
     )(get_book_details_google)
+
+    user_proxy.register_for_execution(
+        name="score_books_by_relevance",
+    )(score_books_by_relevance)
 
     return user_proxy
