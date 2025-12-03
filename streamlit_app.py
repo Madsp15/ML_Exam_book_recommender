@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling
+# Custom CSS for better styling with dark mode support
 st.markdown("""
 <style>
     .main-header {
@@ -39,13 +39,15 @@ st.markdown("""
         color: #1E88E5;
         margin-bottom: 1rem;
     }
+    
+    /* Light mode styling */
     .success-box {
         padding: 1rem;
         border-radius: 0.5rem;
         background-color: #E8F5E9;
         border-left: 5px solid #4CAF50;
         margin: 2rem 0;
-        color: #C62828;
+        color: #1B5E20;
     }
     .error-box {
         padding: 1rem;
@@ -53,6 +55,7 @@ st.markdown("""
         background-color: #FFEBEE;
         border-left: 5px solid #F44336;
         margin: 1rem 0;
+        color: #C62828;
     }
     .info-box {
         padding: 1rem;
@@ -60,6 +63,7 @@ st.markdown("""
         background-color: #E3F2FD;
         border-left: 5px solid #2196F3;
         margin: 1rem 0;
+        color: #0D47A1;
     }
     .agent-message {
         padding: 0.5rem;
@@ -69,17 +73,80 @@ st.markdown("""
     .librarian-msg {
         background-color: #E3F2FD;
         border-left: 3px solid #2196F3;
+        color: #0D47A1;
     }
     .critic-msg {
         background-color: #E8F5E9;
         border-left: 3px solid #4CAF50;
+        color: #1B5E20;
     }
     .user-msg {
         background-color: #FFF3E0;
         border-left: 3px solid #FF9800;
+        color: #E65100;
+    }
+    
+    /* Dark mode styling */
+    [data-testid="stAppViewContainer"][data-theme="dark"] .success-box {
+        background-color: rgba(76, 175, 80, 0.15);
+        border-left: 5px solid #66BB6A;
+        color: #A5D6A7;
+    }
+    [data-testid="stAppViewContainer"][data-theme="dark"] .error-box {
+        background-color: rgba(244, 67, 54, 0.15);
+        border-left: 5px solid #EF5350;
+        color: #EF9A9A;
+    }
+    [data-testid="stAppViewContainer"][data-theme="dark"] .info-box {
+        background-color: rgba(33, 150, 243, 0.15);
+        border-left: 5px solid #42A5F5;
+        color: #90CAF9;
+    }
+    [data-testid="stAppViewContainer"][data-theme="dark"] .librarian-msg {
+        background-color: rgba(33, 150, 243, 0.15);
+        border-left: 3px solid #42A5F5;
+        color: #90CAF9;
+    }
+    [data-testid="stAppViewContainer"][data-theme="dark"] .critic-msg {
+        background-color: rgba(76, 175, 80, 0.15);
+        border-left: 3px solid #66BB6A;
+        color: #A5D6A7;
+    }
+    [data-testid="stAppViewContainer"][data-theme="dark"] .user-msg {
+        background-color: rgba(255, 152, 0, 0.15);
+        border-left: 3px solid #FFA726;
+        color: #FFCC80;
+    }
+    
+    /* Ensure main header is visible in dark mode */
+    [data-testid="stAppViewContainer"][data-theme="dark"] .main-header {
+        color: #42A5F5;
     }
 </style>
 """, unsafe_allow_html=True)
+
+# Function to convert technical agent names to human-friendly names
+def get_friendly_agent_name(agent_name):
+    """Convert technical agent names to human-friendly display names"""
+    name_mapping = {
+        "librarianagentapiagent": "Librarian Agent",
+        "librarian_agent": "Librarian Agent",
+        "internal_critic_agent": "Internal Critic",
+        "critic_agent": "Internal Critic",
+        "user_proxy_agent": "User Proxy",
+        "user_proxy": "User Proxy",
+        "userproxy": "User Proxy"
+    }
+
+    # Try to find a match (case-insensitive)
+    agent_name_lower = agent_name.lower().replace(" ", "")
+    for key, friendly_name in name_mapping.items():
+        if key in agent_name_lower:
+            return friendly_name
+
+    # If no match found, return cleaned up version of original name
+    # Remove underscores and capitalize words
+    return agent_name.replace("_", " ").title()
 
 # Initialize session state
 if "search_history" not in st.session_state:
@@ -126,18 +193,15 @@ with st.sidebar:
 st.markdown('<p class="main-header"> Book Recommender Agent</p>', unsafe_allow_html=True)
 st.markdown("Enter your book search query below and let the AI agents find the perfect recommendations for you!")
 
-# Check for API key
+# Determine which API key to use based on provider
 if llm_provider == "mistral":
     env_var_name = "MISTRAL_API_KEY"
 elif llm_provider == "google":
     env_var_name = "GOOGLE_LLM_API_KEY"
 elif llm_provider == "cerebras":
     env_var_name = "CEREBRAS_API_KEY"
-
-api_key = os.getenv(env_var_name)
-if not api_key:
-    st.markdown(f'<div class="error-box"> <strong>Error:</strong> {env_var_name} not found in environment variables. Please add it to your .env file.</div>', unsafe_allow_html=True)
-    st.stop()
+else:
+    env_var_name = None
 
 # Input section
 st.markdown("### Enter Your Book Search Query")
@@ -167,6 +231,12 @@ if "example_loaded" in st.session_state and st.session_state.example_loaded:
 
 # Process search
 if search_button and user_prompt.strip():
+    # Check for API key first
+    api_key = os.getenv(env_var_name) if env_var_name else None
+    if not api_key:
+        st.markdown(f'<div class="error-box"> <strong>Error:</strong> {env_var_name} not found in environment variables. Please add it to your .env file.</div>', unsafe_allow_html=True)
+        st.stop()
+
     with st.spinner("AI agents are working on your request..."):
         executor = None  # Initialize executor to None
         try:
@@ -182,7 +252,7 @@ if search_button and user_prompt.strip():
             # Initialize agents
             llm_config = get_llm_config(llm_provider=llm_provider, api_key=api_key)
 
-            # Check Docker
+            # Initialize Docker executor only when actually searching
             try:
                 executor = DockerCommandLineCodeExecutor(work_dir=get_work_dir())
             except Exception as docker_error:
@@ -245,6 +315,11 @@ if st.session_state.current_result:
         # Display librarian results
         st.markdown("### Recommended Books")
 
+        # Show result source indicator
+        result_source = result.get("result_source", "librarian")
+        if result_source == "critic_fallback":
+            st.markdown('<div class="info-box">ℹ️ <strong>Note:</strong> Full book details unavailable (API issue). Showing results based on search snippets.</div>', unsafe_allow_html=True)
+
         if result.get("librarian_result"):
             st.markdown('<div class="success-box">', unsafe_allow_html=True)
             st.markdown(result["librarian_result"])
@@ -270,6 +345,9 @@ if st.session_state.current_result:
                         content = msg.get("content", "")
                         role = msg.get("role", "")
 
+                        # Convert to friendly name
+                        friendly_name = get_friendly_agent_name(agent_name)
+
                         # Determine styling based on agent
                         if "librarian" in agent_name.lower():
                             css_class = "librarian-msg"
@@ -282,7 +360,7 @@ if st.session_state.current_result:
                             icon = "🧍‍♂️"
 
                         if content and content.strip():
-                            st.markdown(f'<div class="agent-message {css_class}"><strong>{icon} {agent_name}</strong></div>', unsafe_allow_html=True)
+                            st.markdown(f'<div class="agent-message {css_class}"><strong>{icon} {friendly_name}</strong></div>', unsafe_allow_html=True)
                             st.text(content[:500] + "..." if len(content) > 500 else content)
                             st.markdown("---")
                 else:

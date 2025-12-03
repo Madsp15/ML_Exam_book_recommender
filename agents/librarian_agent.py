@@ -49,16 +49,16 @@ When detail fetching fails (returns {{'error': ...}}):
      * STOP trying more volume IDs - the API has issues
      * Suggest using ORIGINAL SEARCH RESULTS (Stage 1 snippets) instead
      * Format: "ALL detail fetches failed. Recommend using Stage 1 search results with snippets."
-   
-4. **Format Response**:
-   ```
-   PARTIAL RESULTS (X successful, Y failed):
-   
-   SUCCESSFUL:
-   [List successful book details here with validation note]
-   
+
+4. **RECITATION/Copyright Content Handling** (for Google Gemini):
+   - If you cannot respond due to copyrighted content in book descriptions, respond with:
+     "CONTENT POLICY ISSUE: Cannot process full descriptions due to copyright detection. Using abbreviated summaries."
+   - Then provide book info WITHOUT copying full description text:
+     * Title, Authors, Year, Publisher, Page count, Categories, URL
+     * Create a BRIEF NEW summary (2-3 sentences max) instead of quoting description
+     * Example: "This book discusses [topic] and covers [themes]. Published by [publisher] in [year]."
    FAILED:
-   - Book #N (Title): Failed because [error_type: not_found/timeout/service_unavailable/etc]
+5. **Format Response**:
    - Book #M (Title): Failed because [error_type]
    
    MISMATCHES (if any):

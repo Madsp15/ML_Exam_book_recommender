@@ -1,5 +1,6 @@
 ﻿import os
 import sys
+import os
 import dotenv
 import logging
 import argparse
@@ -113,14 +114,41 @@ def speaker_selection(last_speaker, groupchat):
     critic = agents_dict.get("internal_critic")
     proxy = agents_dict.get("user_proxy")
 
+    # Check for RECITATION errors (Google Gemini copyright detection)
+    # Look for "Unsuccessful Finish Reason: RECITATION" in recent messages
+    recitation_detected = False
+    for msg in messages[-3:]:  # Check last 3 messages
+        content = msg.get("content", "")
+        if "RECITATION" in content or "Unsuccessful Finish Reason" in content:
+            recitation_detected = True
+            logging.warning("RECITATION error detected - copyright content blocked by Gemini")
+            break
+
+    if recitation_detected:
+        # Force fallback to Stage 1 results immediately
+        # Inject a message to the critic to use Stage 1 results
+        logging.info("Triggering fallback to Stage 1 search results due to RECITATION")
+        # The critic should detect this and use Stage 1 results
+        return critic
+
     # kick-off: user_proxy starts with TASK, librarian agent responds
     if last_speaker is proxy and last_message_content.strip().startswith("TASK:"):
         return librarian
 
     # After user_proxy speaks (e.g., tool execution result)
     if last_speaker is proxy:
-        # If it's a tool result, librarian should process it
+        # If it's a tool result, route back to whoever called the tool
         if last_message.get("role") == "tool":
+            # Look back to find who made the tool call
+            for msg in reversed(messages[:-1]):  # Skip the current message
+                if "tool_calls" in msg:
+                    caller_name = msg.get("name")
+                    if caller_name == "internal_critic":
+                        return critic
+                    elif caller_name == "librarianAgentApiAgent":
+                        return librarian
+                    break
+            # Default: return to librarian if we can't determine the caller
             return librarian
         else:
             return critic
@@ -136,7 +164,10 @@ def speaker_selection(last_speaker, groupchat):
 
     # After critic speaks
     if last_speaker is critic:
-        if "OK:" in last_message_content:
+        # If critic made a tool call, user_proxy executes it
+        if "tool_calls" in last_message:
+            return proxy
+        elif "OK:" in last_message_content:
             # Critic approved, conversation can end
             return None
         else:
@@ -192,17 +223,22 @@ def process_single_task(task: str, llm_config: dict, librarian_agent, internal_c
             summary_method="reflection_with_llm",
         )
 
-        # Extract the final approved result from internal critic
+        # Extract the final approved result
+        # This checks librarian first, then falls back to internal_critic for error recovery
         librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
 
         # Extract critic's evaluation
         critic_evaluation = None
+        result_source = "librarian"  # Track where the result came from
         for msg in reversed(chat.chat_history):
             if msg.get("name") == "internal_critic" and "OK:" in (msg.get("content") or ""):
                 critic_evaluation = msg.get("content")
+                # Check if result came from critic's fallback (API failure scenario)
+                if "Using Stage 1 search results" in critic_evaluation or "API detail fetching failed" in critic_evaluation:
+                    result_source = "critic_fallback"
                 break
 
-        logging.info(f"\n{'='*80}\nLibrarian Result:\n{librarian_result}\n")
+        logging.info(f"\n{'='*80}\nLibrarian Result (source: {result_source}):\n{librarian_result}\n")
         logging.info(f"Critic Evaluation:\n{critic_evaluation}\n{'='*80}\n")
 
         return {
@@ -210,6 +246,7 @@ def process_single_task(task: str, llm_config: dict, librarian_agent, internal_c
             "librarian_result": librarian_result,
             "critic_evaluation": critic_evaluation,
             "chat_history": chat.chat_history,
+            "result_source": result_source,  # 'librarian' or 'critic_fallback'
             "error": None,
         }
     except TypeError as e:

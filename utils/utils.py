@@ -173,8 +173,13 @@ def get_work_dir():
 def extract_final_answer(chat: ChatResult, agent_name: str) -> str:
     """
     Extracts the final answer (RESULT:) from the agent's chat history.
+
+    First checks the specified agent_name (usually librarian), then falls back
+    to checking internal_critic if no result found (for fallback scenarios when
+    API detail fetching fails).
     """
 
+    # First, try to find RESULT from the specified agent (normal flow)
     for msg in reversed(chat.chat_history):
         name = msg.get("name", "")
         content = msg.get("content", "")
@@ -187,6 +192,22 @@ def extract_final_answer(chat: ChatResult, agent_name: str) -> str:
             content = content.replace("TERMINATE:", "")
             result_index = content.index("RESULT:") + len("RESULT:")
             return content[result_index:].strip()
+
+    # Fallback: Check internal_critic for RESULT (error recovery flow)
+    for msg in reversed(chat.chat_history):
+        name = msg.get("name", "")
+        content = msg.get("content", "")
+        if not content or not content.strip():
+            continue
+        if name != "internal_critic":
+            continue
+        # Check for critic's OK: + RESULT: pattern (fallback scenario)
+        if "OK:" in content and "RESULT:" in content:
+            # Extract everything after "RESULT:"
+            content = content.replace("TERMINATE:", "")
+            result_index = content.index("RESULT:") + len("RESULT:")
+            return content[result_index:].strip()
+
     return "No RESULT found."
 
 

@@ -67,10 +67,11 @@ STAGE 1.5 - ERROR RECOVERY (When librarian reports PARTIAL RESULTS or FAILED det
 
 Your job:
 1. Check how many books were successfully fetched vs failed
-2. Check for error types: circuit_breaker_open, service_unavailable, not_found, timeout
-3. If circuit breaker is open OR all fetches failed with 503/unavailable -> IMMEDIATELY fall back to Stage 1
+2. Check for error types: circuit_breaker_open, service_unavailable, not_found, timeout, RECITATION/copyright
+3. If circuit breaker is open OR all fetches failed with 503/unavailable OR RECITATION error -> IMMEDIATELY fall back to Stage 1
 4. If 3+ successful books with VALIDATED volume IDs, proceed to STAGE 2
 5. Check for MISMATCHES - if librarian reports volume ID/title mismatches, those books are INVALID
+6. **RECITATION Handling**: If librarian says "CONTENT POLICY ISSUE" or mentions copyright detection, use Stage 1 snippets immediately
 
 Respond with ONE of:
 

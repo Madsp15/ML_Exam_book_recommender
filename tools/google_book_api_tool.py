@@ -349,6 +349,17 @@ def get_book_details_google(volume_id: str) -> dict:
                 result["averageRating"] = volume_info.get("averageRating")
                 result["ratingsCount"] = volume_info.get("ratingsCount")
 
+            # Sanitize description to avoid RECITATION errors in Google Gemini
+            # RECITATION errors occur when Gemini detects copyrighted content
+            try:
+                from utils.recitation_handler import sanitize_book_details_for_gemini
+                result = sanitize_book_details_for_gemini(result)
+                logging.debug(f"Sanitized book description for Gemini compatibility")
+            except ImportError:
+                logging.warning("Could not import recitation_handler, skipping sanitization")
+            except Exception as e:
+                logging.warning(f"Failed to sanitize book details: {e}")
+
             # Log successful fetch
             logging.info(f"Successfully fetched details for volume {volume_id} -> '{result['title']}' by {result['authors']}")
             return result
