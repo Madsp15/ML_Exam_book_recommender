@@ -235,12 +235,21 @@ def process_single_task(task: str, llm_config: dict, librarian_agent, internal_c
 
 
 def main():
-    results = []
-    for task in simple_tasks:
-        result = process_single_task(task, LLM_CONFIG, librarian_agent, internal_critic, user_proxy)
-        results.append(result)
+    """Main function to run the book recommender agent."""
+    try:
+        results = []
+        for task in simple_tasks:
+            result = process_single_task(
+                task, LLM_CONFIG, librarian_agent, internal_critic, user_proxy
+            )
+            results.append(result)
 
-    save_results(results)
+        save_results(results)
+    finally:
+        # Stop the Docker executor to clean up containers
+        if executor:
+            executor.stop()
+            logging.info("Docker executor stopped.")
 
 
 if __name__ == "__main__":
