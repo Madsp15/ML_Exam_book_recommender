@@ -1,11 +1,16 @@
 ﻿from autogen import UserProxyAgent
-from autogen.coding import DockerCommandLineCodeExecutor
 
 from tools import search_google_books, get_book_details_google
 from agents.internal_critic_agent import score_books_by_relevance
 
 
-def get_user_proxy(executor: DockerCommandLineCodeExecutor) -> UserProxyAgent:
+def get_user_proxy() -> UserProxyAgent:
+    """
+    Create a UserProxyAgent for executing tool calls.
+
+    Note: Code execution is disabled since this agent only executes
+    pre-defined API function calls, not dynamically generated code.
+    """
     user_proxy = UserProxyAgent(
         name="user_proxy",
         human_input_mode="NEVER",
@@ -16,9 +21,7 @@ def get_user_proxy(executor: DockerCommandLineCodeExecutor) -> UserProxyAgent:
             and isinstance(msg.get("content"), str)
             and "TERMINATE" in msg["content"]
         ),
-        code_execution_config={
-            "executor": executor,
-        },
+        code_execution_config=False,  # Disabled - only using function calls
     )
 
     user_proxy.register_for_execution(

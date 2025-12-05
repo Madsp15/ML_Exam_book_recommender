@@ -7,8 +7,7 @@ import dotenv
 from agents.internal_critic_agent import get_internal_critic_agent
 from agents.librarian_agent import get_librarian_agent_api_agent
 from agents.user_proxy_agent import get_user_proxy
-from autogen.coding import DockerCommandLineCodeExecutor
-from utils.utils import get_llm_config, get_work_dir
+from utils.utils import get_llm_config
 from main import process_single_task
 
 # Set UTF-8 encoding for Windows console
@@ -83,7 +82,6 @@ with st.sidebar:
     st.markdown("""
     **Before using:**
     - Set API keys in `.env` file
-    - Docker must be running
     - All dependencies installed
     
     **Example prompt:**
@@ -151,7 +149,6 @@ if search_button and user_prompt.strip():
         st.stop()
 
     with st.spinner("AI agents are working on your request..."):
-        executor = None  # Initialize executor to None
         try:
             # Setup logging to capture agent logs
             log_stream = StringIO()
@@ -165,16 +162,9 @@ if search_button and user_prompt.strip():
             # Initialize agents
             llm_config = get_llm_config(llm_provider=llm_provider, api_key=api_key)
 
-            # Initialize Docker executor only when actually searching
-            try:
-                executor = DockerCommandLineCodeExecutor(work_dir=get_work_dir())
-            except Exception as docker_error:
-                st.markdown(f'<div class="error-box"> <strong>Docker Error:</strong> {str(docker_error)}<br><br><strong>Troubleshooting:</strong><br>- Make sure Docker Desktop is installed and running<br>- Check if Docker daemon is accessible</div>', unsafe_allow_html=True)
-                st.stop()
-
             librarian_agent = get_librarian_agent_api_agent(custom_llm_config=llm_config)
             internal_critic = get_internal_critic_agent(llm_config=llm_config, terminate_conversation=True)
-            user_proxy = get_user_proxy(executor=executor)
+            user_proxy = get_user_proxy()
 
             # Process the task
             result = process_single_task(
@@ -199,11 +189,6 @@ if search_button and user_prompt.strip():
         except Exception as e:
             st.markdown(f'<div class="error-box"> <strong>Unexpected Error:</strong> {str(e)}</div>', unsafe_allow_html=True)
             st.stop()
-        finally:
-            # Stop the Docker executor to clean up containers
-            if executor:
-                executor.stop()
-                logging.info("Docker executor stopped.")
 
 # Display results
 if st.session_state.current_result:

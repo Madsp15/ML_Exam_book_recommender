@@ -66,12 +66,27 @@ SEARCH SUGGESTIONS FOR LIBRARIAN:
 STAGE 1.5 - ERROR RECOVERY (When librarian reports PARTIAL RESULTS or FAILED detail fetches):
 
 Your job:
-1. Check how many books were successfully fetched vs failed
-2. Check for error types: service_unavailable, not_found, timeout, RECITATION/copyright
-3. If all fetches failed with 503/unavailable OR RECITATION error -> IMMEDIATELY fall back to Stage 1
-4. If 3+ successful books with VALIDATED volume IDs, proceed to STAGE 2
-5. Check for MISMATCHES - if librarian reports volume ID/title mismatches, those books are INVALID
-6. **RECITATION Handling**: If librarian says "CONTENT POLICY ISSUE" or mentions copyright detection, use Stage 1 snippets immediately
+1. Check how many books were successfully fetched vs failed:
+   - SUCCESS: Has title, authors, volumeId, publisher, etc. (description is optional)
+   - FAILURE: Returns error message like 'error': 'not_found' or 'error': 'service_unavailable'
+
+2. Count valid fetches:
+   - If 3+ books have valid metadata → proceed to STAGE 2
+   - If ALL fetches returned error objects → fall back to Stage 1 snippets
+
+3. Handle "No description available":
+   - Books with "No description available" are VALID for STAGE 2 evaluation
+   - Use other metadata: title, subjects, categories, pageCount, publisher
+   - If evaluating these books in STAGE 2 shows they don't match the query well,
+     report WEAK MATCHES and suggest new searches
+
+4. Check for MISMATCHES:
+   - If librarian reports volume ID/title mismatches, those books are INVALID
+
+5. RECITATION Handling:
+   - If librarian says "CONTENT POLICY ISSUE" or mentions copyright detection,
+     immediately use Stage 1 snippets
+
 
 Respond with ONE of:
 

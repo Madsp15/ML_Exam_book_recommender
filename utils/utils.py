@@ -91,8 +91,8 @@ def get_llm_config(
                     "model": "mistral-small-2506",
                     "api_type": "mistral",
                     "api_key": api_key,
-                    "api_rate_limit": 0.1,
-                    "max_retries": 3,
+                    "api_rate_limit": 2,
+                    "max_retries": 5,
                     "timeout": 30,
                     "num_predict": -1,
                     "repeat_penalty": 1.1,
@@ -162,12 +162,6 @@ def get_llm_config(
     else:
         raise ValueError(f"Unsupported LLM provider: {llm_provider}")
 
-
-def get_work_dir():
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H-%M")
-    p = Path.cwd() / "coding" / timestamp
-    p.mkdir(parents=True, exist_ok=True)
-    return p
 
 
 def extract_final_answer(chat: ChatResult, agent_name: str) -> str:

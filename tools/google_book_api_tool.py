@@ -2,7 +2,7 @@
 import time
 import requests
 from typing import List, Set, Tuple
-
+from utils.recitation_handler import sanitize_book_description
 from datamodel.search_result import SearchResult
 from config import GOOGLE_BOOKS_API_KEY
 
@@ -166,6 +166,9 @@ def search_google_books(
                 # Fallback to search snippet if description not available
                 search_info = item.get("searchInfo", {})
                 snippet = search_info.get("textSnippet", "No description available")
+
+            # Sanitize snippet to avoid RECITATION errors when agent quotes it
+            snippet = sanitize_book_description(snippet, max_length=300)
 
             # Truncate snippet if too long
             if len(snippet) > 500:

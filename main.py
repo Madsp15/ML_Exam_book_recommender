@@ -10,7 +10,6 @@ from agents.librarian_agent import get_librarian_agent_api_agent, set_current_qu
 from agents.user_proxy_agent import get_user_proxy
 
 from utils.task_prompts import simple_tasks
-from autogen.coding import DockerCommandLineCodeExecutor
 from autogen import (
     GroupChat,
     GroupChatManager,
@@ -19,7 +18,6 @@ from utils.utils import (
     extract_final_answer,
     save_results,
     get_llm_config,
-    get_work_dir,
 )
 
 
@@ -86,13 +84,9 @@ if not api_key:
 
 LLM_CONFIG = get_llm_config(llm_provider=llm_provider, api_key=api_key)
 
-executor = DockerCommandLineCodeExecutor(
-    work_dir=get_work_dir(),
-)
-
 librarian_agent = get_librarian_agent_api_agent(custom_llm_config=LLM_CONFIG)
 internal_critic = get_internal_critic_agent(llm_config=LLM_CONFIG, terminate_conversation=True)
-user_proxy = get_user_proxy(executor=executor)
+user_proxy = get_user_proxy()
 
 
 def has_critic_approval(messages: list[dict]) -> bool:
@@ -282,11 +276,8 @@ def main():
             results.append(result)
 
         save_results(results)
-    finally:
-        # Stop the Docker executor to clean up containers
-        if executor:
-            executor.stop()
-            logging.info("Docker executor stopped.")
+    except Exception as e:
+        logging.error(f"Fatal error in main execution: {type(e).__name__}: {str(e)}")
 
 
 if __name__ == "__main__":
