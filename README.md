@@ -34,19 +34,19 @@ An intelligent multi-agent system for book discovery and recommendations, powere
    │ Librarian Agent │◄────────┤ Internal Critic Agent│
    │                 │────────►│                      │
    └─────────────────┘         └──────────────────────┘
-   
+
    STAGE 1: Initial Search           STAGE 1: Screening
    • search_google_books (10)        • Reviews titles/snippets
    • Returns basic info              • Identifies 5 promising
-   • Semantic scoring applied        • Requests details or new search
+                                     • Requests details or new search
          │                                   │
-         └─────────────────┬─────────────────┘                                          
-                           ▼                                                    
-   ┌─────────────────┐         ┌──────────────────────┐                         
+         └─────────────────┬─────────────────┘
+                           ▼
+   ┌─────────────────┐         ┌──────────────────────┐
    │ Librarian Agent │◄────────┤ Internal Critic Agent│
    │                 │────────►│                      │
    └─────────────────┘         └──────────────────────┘
-   
+
    STAGE 2: Detail Fetch            STAGE 2: Final Selection
    • get_book_details_google (5)    • score_books_by_relevance
    • Returns full descriptions       • Evaluates against requirements
@@ -57,7 +57,7 @@ An intelligent multi-agent system for book discovery and recommendations, powere
 ### Conversation Flow
 
 1. **Initialization**: User Proxy sends `TASK:` with user's query
-2. **Stage 1 - Search**: Librarian searches Google Books (10 results with semantic scores)
+2. **Stage 1 - Search**: Librarian searches Google Books (10 results)
 3. **Stage 1 - Screen**: Critic reviews snippets, identifies 5 promising books
 4. **Stage 2 - Fetch**: Librarian gets detailed info for selected books
 5. **Stage 2 - Evaluate**: Critic scores and validates, selects top 3
