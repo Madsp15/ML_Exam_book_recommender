@@ -68,7 +68,7 @@ When detail fetching fails (returns {{'error': ...}}):
    
    SUGGESTED FALLBACKS: 
    - Try fetching details for #[alternative indices from original search]
-   - OR if all failed/circuit breaker: "Recommend using Stage 1 search results with snippets only"
+   - OR if all failed: "Recommend using Stage 1 search results with snippets only"
    ```
    
 5. NEVER return empty "RESULT: []" - always provide context about what happened

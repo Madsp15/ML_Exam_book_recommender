@@ -67,8 +67,8 @@ STAGE 1.5 - ERROR RECOVERY (When librarian reports PARTIAL RESULTS or FAILED det
 
 Your job:
 1. Check how many books were successfully fetched vs failed
-2. Check for error types: circuit_breaker_open, service_unavailable, not_found, timeout, RECITATION/copyright
-3. If circuit breaker is open OR all fetches failed with 503/unavailable OR RECITATION error -> IMMEDIATELY fall back to Stage 1
+2. Check for error types: service_unavailable, not_found, timeout, RECITATION/copyright
+3. If all fetches failed with 503/unavailable OR RECITATION error -> IMMEDIATELY fall back to Stage 1
 4. If 3+ successful books with VALIDATED volume IDs, proceed to STAGE 2
 5. Check for MISMATCHES - if librarian reports volume ID/title mismatches, those books are INVALID
 6. **RECITATION Handling**: If librarian says "CONTENT POLICY ISSUE" or mentions copyright detection, use Stage 1 snippets immediately
@@ -81,9 +81,9 @@ ACKNOWLEDGED: Received [N] successful and validated books, proceeding to evaluat
 ```
 Then immediately evaluate those books as in STAGE 2.
 
-B) If fewer than 3 successful OR circuit breaker open OR all service_unavailable:
+B) If fewer than 3 successful OR all service_unavailable:
 ```
-ACKNOWLEDGED: API detail fetching failed [reason: circuit breaker/service unavailable/too many failures]. Using Stage 1 search results with snippets.
+ACKNOWLEDGED: API detail fetching failed [reason: service unavailable/too many failures]. Using Stage 1 search results with snippets.
 
 OK: Selecting top 3 from initial search results based on titles and snippets.
 
@@ -112,7 +112,7 @@ Fall back to Stage 1 search results with snippets only.
 ```
 Then proceed as in option B above.
 
-D) If fewer than 3 successful AND no circuit breaker AND some books still available:
+D) If fewer than 3 successful AND some books still available:
 ```
 INSUFFICIENT RESULTS: Only [N] books succeeded, need at least 3.
 

@@ -30,100 +30,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better styling with dark mode support
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1E88E5;
-        margin-bottom: 1rem;
-    }
-    
-    /* Light mode styling */
-    .success-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #E8F5E9;
-        border-left: 5px solid #4CAF50;
-        margin: 2rem 0;
-        color: #1B5E20;
-    }
-    .error-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #FFEBEE;
-        border-left: 5px solid #F44336;
-        margin: 1rem 0;
-        color: #C62828;
-    }
-    .info-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #E3F2FD;
-        border-left: 5px solid #2196F3;
-        margin: 1rem 0;
-        color: #0D47A1;
-    }
-    .agent-message {
-        padding: 0.5rem;
-        margin: 0.5rem 0;
-        border-radius: 0.3rem;
-    }
-    .librarian-msg {
-        background-color: #E3F2FD;
-        border-left: 3px solid #2196F3;
-        color: #0D47A1;
-    }
-    .critic-msg {
-        background-color: #E8F5E9;
-        border-left: 3px solid #4CAF50;
-        color: #1B5E20;
-    }
-    .user-msg {
-        background-color: #FFF3E0;
-        border-left: 3px solid #FF9800;
-        color: #E65100;
-    }
-    
-    /* Dark mode styling */
-    [data-testid="stAppViewContainer"][data-theme="dark"] .success-box {
-        background-color: rgba(76, 175, 80, 0.15);
-        border-left: 5px solid #66BB6A;
-        color: #A5D6A7;
-    }
-    [data-testid="stAppViewContainer"][data-theme="dark"] .error-box {
-        background-color: rgba(244, 67, 54, 0.15);
-        border-left: 5px solid #EF5350;
-        color: #EF9A9A;
-    }
-    [data-testid="stAppViewContainer"][data-theme="dark"] .info-box {
-        background-color: rgba(33, 150, 243, 0.15);
-        border-left: 5px solid #42A5F5;
-        color: #90CAF9;
-    }
-    [data-testid="stAppViewContainer"][data-theme="dark"] .librarian-msg {
-        background-color: rgba(33, 150, 243, 0.15);
-        border-left: 3px solid #42A5F5;
-        color: #90CAF9;
-    }
-    [data-testid="stAppViewContainer"][data-theme="dark"] .critic-msg {
-        background-color: rgba(76, 175, 80, 0.15);
-        border-left: 3px solid #66BB6A;
-        color: #A5D6A7;
-    }
-    [data-testid="stAppViewContainer"][data-theme="dark"] .user-msg {
-        background-color: rgba(255, 152, 0, 0.15);
-        border-left: 3px solid #FFA726;
-        color: #FFCC80;
-    }
-    
-    /* Ensure main header is visible in dark mode */
-    [data-testid="stAppViewContainer"][data-theme="dark"] .main-header {
-        color: #42A5F5;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Load custom CSS from external file
+def load_css():
+    css_file = os.path.join(os.path.dirname(__file__), "static", "style.css")
+    with open(css_file) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+load_css()
 
 # Function to convert technical agent names to human-friendly names
 def get_friendly_agent_name(agent_name):
