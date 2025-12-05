@@ -74,7 +74,7 @@ The `speaker_selection` function in `main.py` orchestrates agent turns:
 - **Critic → Librarian**: When requesting new search
 - **Critic → None**: When approving results (terminates)
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -201,7 +201,7 @@ ML_Exam_book_recommender/
 └── README.md                    # This file
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### LLM Configuration
 
@@ -271,7 +271,7 @@ LLM_CONFIG = {
    - `OK: RESULT: TOP 3 SELECTED BOOKS` → Success (terminates)
    - `CRITIQUE:` + new suggestions → Back to Stage 1
 
-## 🛡Error Handling
+## Error Handling
 
 ### API Failure Recovery
 

@@ -217,11 +217,7 @@ def process_single_task(task: str, llm_config: dict, librarian_agent, internal_c
             summary_method="reflection_with_llm",
         )
 
-        # Extract the final approved result
-        # This checks librarian first, then falls back to internal_critic for error recovery
-        librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
-
-        # Extract critic's evaluation
+        # Extract critic's evaluation first to determine result source
         critic_evaluation = None
         result_source = "librarian"  # Track where the result came from
         for msg in reversed(chat.chat_history):
@@ -232,7 +228,17 @@ def process_single_task(task: str, llm_config: dict, librarian_agent, internal_c
                     result_source = "critic_fallback"
                 break
 
-        logging.info(f"\n{'='*80}\nLibrarian Result (source: {result_source}):\n{librarian_result}\n")
+        # Extract the final approved result
+        # For fallback scenarios, use critic's RESULT directly
+        # For normal flow, use librarian's RESULT
+        if result_source == "critic_fallback":
+            # Extract RESULT from critic's message
+            librarian_result = extract_final_answer(chat, "internal_critic")
+        else:
+            # Normal flow: check librarian first, then fall back to critic
+            librarian_result = extract_final_answer(chat, "librarianAgentApiAgent")
+
+        logging.info(f"\n{'='*80}\nFinal Result (source: {result_source}):\n{librarian_result}\n")
         logging.info(f"Critic Evaluation:\n{critic_evaluation}\n{'='*80}\n")
 
         return {
