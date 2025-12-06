@@ -57,9 +57,12 @@ NONE PROMISING
 CRITIQUE: <what was requested vs what was found in the search results>
 
 SEARCH SUGGESTIONS FOR LIBRARIAN:
-1. Query: "<exact query string>" (Rationale: <why this would help>)
-2. Author: "<specific author name>" (Rationale: <why - mention specific books by this author>)
-3. Alternative: "<different keywords>" (Rationale: <why>)
+Suggest 2-3 alternative search terms, queries, or author names that could be tried within the available book APIs:
+1. Query: "<exact query string>" - Rationale: <why this search term might yield better results>
+2. Query: "<alternative keywords>" - Rationale: <why these terms might work better>
+3. Author: "<specific author name>" - Rationale: <mention specific books or why this author is relevant>
+
+Note: Only suggest search terms/queries that can be executed within the existing book search APIs. Do not suggest external databases or non-search actions.
 ```
 
 ---
