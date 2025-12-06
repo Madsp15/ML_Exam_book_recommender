@@ -13,46 +13,11 @@ An intelligent multi-agent system for book discovery and recommendations, powere
 - **Error Recovery**: Robust handling of API failures and content policy issues
 - **Smart Filtering**: Automatic exclusion of non-narrative and irrelevant books
 
-##  Architecture
+## Architecture
 
 ### Agent Flow
 
-```
-┌─────────────┐
-│ User Query  │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────────────────────────────────────────────────┐
-│                    User Proxy Agent                     │
-│  • Initiates conversation with TASK                     │
-│  • Executes tool calls (API functions)                  │
-└────────────┬─────────────────────────────┬──────────────┘
-             │                             │
-             ▼                             ▼
-   ┌─────────────────┐         ┌──────────────────────┐
-   │ Librarian Agent │◄────────┤ Internal Critic Agent│
-   │                 │────────►│                      │
-   └─────────────────┘         └──────────────────────┘
-
-   STAGE 1: Initial Search           STAGE 1: Screening
-   • search_google_books (10)        • Reviews titles/snippets
-   • Returns basic info              • Identifies 5 promising
-                                     • Requests details or new search
-         │                                   │
-         └─────────────────┬─────────────────┘
-                           ▼
-   ┌─────────────────┐         ┌──────────────────────┐
-   │ Librarian Agent │◄────────┤ Internal Critic Agent│
-   │                 │────────►│                      │
-   └─────────────────┘         └──────────────────────┘
-
-   STAGE 2: Detail Fetch            STAGE 2: Final Selection
-   • get_book_details_google (5)    • score_books_by_relevance
-   • Returns full descriptions       • Evaluates against requirements
-   • Handles API failures           • Selects TOP 3 books
-                                    • Returns RESULT or CRITIQUE
-```
+![Book recommender agent flow.drawio.png](Book%20recommender%20agent%20flow.drawio.png)
 
 ### Conversation Flow
 
@@ -95,17 +60,17 @@ cd ML_Exam_book_recommender
 ```bash
 pip install -r requirements.txt
 ```
+### Key Dependencies
 
-3. **Configure API keys** - Create a `.env` file:
-```env
-# Required
-GOOGLE_LLM_API_KEY=your_google_api_key_here
-GOOGLE_BOOKS_API_KEY=your_google_books_key_here
+- `pyautogen~=0.2.22` - Multi-agent framework
+- `streamlit~=1.41.1` - Web interface
+- `google-generativeai~=0.8.3` - Google Gemini API
+- `sentence-transformers~=3.3.1` - Semantic scoring
+- `python-dotenv~=1.0.1` - Environment configuration
 
-# Optional - for alternative LLM providers
-MISTRAL_API_KEY=your_mistral_key_here
-CEREBRAS_API_KEY=your_cerebras_key_here
-```
+See `requirements.txt` for complete list.
+
+3. **Configure API keys** - See [Configuration](#configuration) section below
 
 ### Running the Application
 
@@ -127,6 +92,67 @@ python main.py --google
 python main.py --mistral
 python main.py --cerebras
 ```
+
+## Configuration
+
+### API Keys
+
+Create a `.env` file in the project root:
+
+```env
+# Required
+GOOGLE_LLM_API_KEY=your_google_api_key_here
+GOOGLE_BOOKS_API_KEY=your_google_books_key_here
+
+# Optional - for alternative LLM providers
+MISTRAL_API_KEY=your_mistral_key_here
+CEREBRAS_API_KEY=your_cerebras_key_here
+```
+### Obtaining API Keys
+
+**Google Gemini API**:
+1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Sign in and create a new API key
+
+**Google Books API**:
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Enable Books API
+3. Create credentials → API key
+
+
+### LLM Configuration
+
+Edit `config.py` or use command-line arguments to change the LLM provider:
+
+```python
+LLM_CONFIG = {
+    "model": "gemini-2.0-flash",
+    "api_type": "google",
+    "api_key": GOOGLE_LLM_API_KEY,
+    "api_rate_limit": 0.1,
+    "max_retries": 3,
+    "timeout": 30,
+}
+```
+
+### Agent Parameters
+
+**Librarian Agent**:
+- Max search results: 10 (always)
+- Max detail fetches: 5 per turn
+- Semantic scoring: Automatic with all-MiniLM-L6-v2
+
+**Internal Critic**:
+- Scoring tool: `score_books_by_relevance`
+- Relevance thresholds:
+  - ≥80: HIGHLY relevant
+  - 65-79: MODERATELY relevant
+  - 50-64: SOMEWHAT relevant
+  - <50: LOW relevance
+
+**Conversation**:
+- Max rounds: 20
+- Termination: When critic approves with `OK:`
 
 ## Usage
 
@@ -167,77 +193,17 @@ Results are saved to `logs/` directory with timestamps, including:
 - Full chat history
 - Error information (if any)
 
-## Project Structure
+### Manual Testing
 
-```
-ML_Exam_book_recommender/
-├── agents/
-│   ├── __init__.py
-│   ├── librarian_agent.py        # Search specialist agent
-│   ├── internal_critic_agent.py  # Quality evaluator agent
-│   └── user_proxy_agent.py       # Tool executor agent
-├── tools/
-│   ├── __init__.py
-│   ├── google_book_api_tool.py   # Google Books API wrapper
-│   ├── big_book_api_tool.py      # Big Book API wrapper
-│   ├── open_library_api_tool.py  # Open Library API wrapper
-│   └── semantic_scoring_tool.py  # Semantic similarity scoring
-├── utils/
-│   ├── semantic_scorer.py        # Sentence-transformers scoring
-│   ├── task_prompts.py           # Test task definitions
-│   ├── utils.py                  # Helper functions
-│   └── recitation_handler.py     # Copyright content handler
-├── datamodel/
-│   ├── __init__.py
-│   └── search_result.py          # Unified search result model
-├── static/
-│   └── style.css                 # Streamlit custom styling
-├── logs/                         # Output logs directory
-├── main.py                       # CLI entry point
-├── streamlit_app.py             # Web UI entry point
-├── config.py                     # Configuration settings
-├── requirements.txt              # Python dependencies
-├── start_frontend.bat           # Windows quick-start script
-└── README.md                    # This file
+For testing purposes, edit the user prompt in `utils/task_prompts.py`, then run:
+
+```bash
+python main.py
 ```
 
-## Configuration
+Results are saved to `logs/` with timestamps.
 
-### LLM Configuration
-
-Edit `config.py` or use command-line arguments:
-
-```python
-LLM_CONFIG = {
-    "model": "gemini-2.0-flash",
-    "api_type": "google",
-    "api_key": GOOGLE_LLM_API_KEY,
-    "api_rate_limit": 0.1,
-    "max_retries": 3,
-    "timeout": 30,
-}
-```
-
-### Agent Parameters
-
-**Librarian Agent**:
-- Max search results: 10 (always)
-- Max detail fetches: 5 per turn
-- Semantic scoring: Automatic with all-MiniLM-L6-v2
-
-**Internal Critic**:
-- Scoring tool: `score_books_by_relevance`
-- Relevance thresholds:
-  - ≥80: HIGHLY relevant
-  - 65-79: MODERATELY relevant
-  - 50-64: SOMEWHAT relevant
-  - <50: LOW relevance
-
-**Conversation**:
-- Max rounds: 20
-- Termination: When critic approves with `OK:`
-
-## Two-Stage Workflow Details
+## How It Works
 
 ### Stage 1: Initial Search & Screening
 
@@ -294,19 +260,6 @@ Validates that fetched book details match search results:
 - Title cross-reference
 - Reports discrepancies to critic
 
-### Run Test Tasks
-
-The `utils/task_prompts.py` file contains predefined test queries:
-
-```bash
-python main.py
-```
-
-Results are saved to `logs/` with timestamps.
-
-### Custom Tasks
-
-Edit `simple_tasks` in `task_prompts.py` or use the web interface.
 
 ## Semantic Scoring
 
