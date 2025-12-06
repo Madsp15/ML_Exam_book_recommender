@@ -32,9 +32,39 @@ def score_books_by_relevance(user_prompt: str, books_json: str) -> str:
     """
     import json
 
+    import ast
+
     try:
-        # Parse books from JSON
-        books = json.loads(books_json)
+        # Parse books from JSON - try multiple strategies
+        books = None
+        parse_error = None
+
+        # Strategy 1: Direct JSON parsing
+        try:
+            books = json.loads(books_json)
+        except json.JSONDecodeError as e:
+            parse_error = e
+            logging.warning(f"Direct JSON parse failed: {e}")
+
+            # Strategy 2: Sanitize Python literals to JSON and retry
+            try:
+                # Replace Python None/True/False with JSON null/true/false
+                import re
+                sanitized = re.sub(r'\bNone\b', 'null', books_json)
+                sanitized = re.sub(r'\bTrue\b', 'true', sanitized)
+                sanitized = re.sub(r'\bFalse\b', 'false', sanitized)
+                books = json.loads(sanitized)
+                logging.info("Successfully parsed after sanitizing Python literals")
+            except json.JSONDecodeError as e2:
+                logging.warning(f"Sanitized JSON parse failed: {e2}")
+
+                # Strategy 3: Use ast.literal_eval for Python syntax
+                try:
+                    books = ast.literal_eval(books_json)
+                    logging.info("Successfully parsed using ast.literal_eval")
+                except (ValueError, SyntaxError) as e3:
+                    logging.error(f"All parsing strategies failed: {e3}")
+                    raise parse_error  # Re-raise original error for outer handler
 
         if not books:
             return "ERROR: No books provided for scoring"

@@ -1,6 +1,7 @@
 ﻿from autogen import AssistantAgent
 import json
 import logging
+import re
 
 from utils.utils import EVALUATION_CRITERIA
 from utils.semantic_scorer import calculate_relevance_scores
@@ -141,6 +142,8 @@ STAGE 2 - SCORE AND EVALUATE (When librarian provides DETAILED information with 
 
 Your job:
 1. Call score_books_by_relevance to calculate semantic relevance scores for the books
+   - If the scoring function returns an ERROR (e.g., JSON parsing issues, content policy blocks),
+     fall back to evaluating books based on descriptions WITHOUT semantic scores
 2. Review the scores alongside full descriptions:
    - Scores ≥80: HIGHLY relevant (excellent semantic match)
    - Scores 65-79: MODERATELY relevant (good match)
@@ -196,6 +199,30 @@ Rules:
     return base_message
 
 
+def _sanitize_json_string(json_str: str) -> str:
+    """
+    Sanitize malformed JSON strings from LLM function calls.
+    Fixes common issues like invalid escape sequences and Python literals.
+
+    Args:
+        json_str: Potentially malformed JSON string
+
+    Returns:
+        Sanitized JSON string
+    """
+    # Replace invalid escape sequences - backslash followed by anything except valid escape chars
+    # Valid JSON escape sequences: \" \\ \/ \b \f \n \r \t \uXXXX
+    json_str = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', json_str)
+
+    # Replace Python literals with JSON equivalents
+    # Use word boundaries to avoid replacing within strings
+    json_str = re.sub(r'\bNone\b', 'null', json_str)
+    json_str = re.sub(r'\bTrue\b', 'true', json_str)
+    json_str = re.sub(r'\bFalse\b', 'false', json_str)
+
+    return json_str
+
+
 def score_books_by_relevance(user_prompt: str, books_json: str) -> str:
     """
     Calculate semantic relevance scores for books against user prompt.
@@ -207,12 +234,48 @@ def score_books_by_relevance(user_prompt: str, books_json: str) -> str:
     Returns:
         Formatted string with books ranked by relevance score (0-100)
     """
+    import ast
+
+    # Try multiple parsing strategies
+    books = None
+    parse_error = None
+
+    # Strategy 1: Direct parsing
     try:
         books = json.loads(books_json)
+        logging.info(f"Strategy 1 (direct JSON): Successfully parsed {len(books) if books else 0} books")
+    except json.JSONDecodeError as e:
+        parse_error = e
+        logging.warning(f"Strategy 1 (direct JSON) failed at char {e.pos}: {e.msg}")
 
-        if not books:
-            return "ERROR: No books provided for scoring"
+        # Strategy 2: Sanitize and retry
+        try:
+            sanitized_json = _sanitize_json_string(books_json)
+            books = json.loads(sanitized_json)
+            logging.info(f"Strategy 2 (sanitized JSON): Successfully parsed {len(books) if books else 0} books")
+        except json.JSONDecodeError as e2:
+            logging.warning(f"Strategy 2 (sanitized JSON) failed at char {e2.pos}: {e2.msg}")
 
+            # Strategy 3: Try ast.literal_eval for Python literal syntax
+            try:
+                books = ast.literal_eval(books_json)
+                logging.info(f"Strategy 3 (ast.literal_eval): Successfully parsed {len(books) if books else 0} books")
+            except (ValueError, SyntaxError) as e3:
+                logging.error(f"All parsing strategies failed. Original: {parse_error}, Last: {e3}")
+                return f"ERROR: Invalid JSON format - Failed to parse book data. Tried 3 strategies. Original error: {str(parse_error)}"
+
+    if not books:
+        return "ERROR: No books provided for scoring"
+
+    # Validate books is a list
+    if not isinstance(books, list):
+        logging.error(f"Expected list of books, got {type(books)}")
+        return f"ERROR: Invalid book data format - expected list, got {type(books).__name__}"
+
+    if len(books) == 0:
+        return "ERROR: Empty book list provided"
+
+    try:
         logging.info(f"Scoring {len(books)} books for prompt: {user_prompt[:100]}...")
 
         # Calculate scores
@@ -244,9 +307,6 @@ def score_books_by_relevance(user_prompt: str, books_json: str) -> str:
 
         return "\n".join(result)
 
-    except json.JSONDecodeError as e:
-        logging.error(f"Failed to parse books JSON: {e}")
-        return f"ERROR: Invalid JSON format - {str(e)}"
     except Exception as e:
         logging.error(f"Error scoring books: {e}")
         return f"ERROR: Failed to score books - {str(e)}"
@@ -266,7 +326,13 @@ def get_internal_critic_agent(
     # Register semantic scoring tool
     internal_critic.register_for_llm(
         name="score_books_by_relevance",
-        description="Calculate semantic relevance scores (0-100) for books against the user's original query. Use this in Stage 2 after receiving detailed book information. Provide user_prompt (string) and books_json (JSON string with book details). Returns books ranked by score.",
+        description="""Calculate semantic relevance scores (0-100) for books against the user's original query. 
+        Use this in Stage 2 after receiving detailed book information. 
+        Parameters:
+        - user_prompt (string): The original user query
+        - books_json (string): A JSON-formatted string containing a list of book dictionaries. 
+          IMPORTANT: Use proper JSON format with null (not None), true/false (not True/False).
+        Returns: Books ranked by relevance score with evaluation.""",
     )(score_books_by_relevance)
 
     return internal_critic

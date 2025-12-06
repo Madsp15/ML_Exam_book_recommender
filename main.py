@@ -109,19 +109,25 @@ def speaker_selection(last_speaker, groupchat):
     proxy = agents_dict.get("user_proxy")
 
     # Check for RECITATION errors (Google Gemini copyright detection)
-    # Look for "Unsuccessful Finish Reason: RECITATION" in recent messages
+    # Look for "Unsuccessful Finish Reason: RECITATION" or "MALFORMED_FUNCTION_CALL" in recent messages
     recitation_detected = False
-    for msg in messages[-3:]:  # Check last 3 messages
+    malformed_call_detected = False
+
+    for msg in messages[-5:]:  # Check last 5 messages for patterns
         content = msg.get("content", "")
         if "RECITATION" in content or "Unsuccessful Finish Reason" in content:
             recitation_detected = True
             logging.warning("RECITATION error detected - copyright content blocked by Gemini")
             break
+        if "MALFORMED_FUNCTION_CALL" in content or "NO CONTENT RETURNED" in content:
+            malformed_call_detected = True
+            logging.warning("Malformed function call detected - likely due to content policy")
+            break
 
-    if recitation_detected:
+    if recitation_detected or malformed_call_detected:
         # Force fallback to Stage 1 results immediately
         # Inject a message to the critic to use Stage 1 results
-        logging.info("Triggering fallback to Stage 1 search results due to RECITATION")
+        logging.info("Triggering fallback to Stage 1 search results due to content policy issues")
         # The critic should detect this and use Stage 1 results
         return critic
 
