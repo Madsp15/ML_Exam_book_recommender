@@ -35,58 +35,8 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8")
 
 
-dotenv.load_dotenv()
-parser = argparse.ArgumentParser(description="Book Recommender Agent")
-group = parser.add_mutually_exclusive_group()
-group.add_argument(
-    "--llm-provider",
-    choices=["mistral", "google", "cerebras"],
-    dest="llm_provider",
-    default="google",
-)
-group.add_argument(
-    "--google",
-    action="store_const",
-    const="google",
-    dest="llm_provider",
-    help="Use Google as LLM provider",
-)
-group.add_argument(
-    "--mistral",
-    action="store_const",
-    const="mistral",
-    dest="llm_provider",
-    help="Use Mistral as LLM provider",
-)
-group.add_argument(
-    "--cerebras",
-    action="store_const",
-    const="cerebras",
-    dest="llm_provider",
-    help="Use Cerebras as LLM provider",
-)
-
-args = parser.parse_args()
-llm_provider = args.llm_provider
-
-if llm_provider == "mistral":
-    env_var_name = "MISTRAL_API_KEY"
-elif llm_provider == "google":
-    env_var_name = "GOOGLE_LLM_API_KEY"
-elif llm_provider == "cerebras":
-    env_var_name = "CEREBRAS_API_KEY"
-else:
-    raise ValueError(f"Unsupported LLM provider: {llm_provider}")
-
-api_key = os.getenv(env_var_name)
-if not api_key:
-    raise ValueError(f"{env_var_name} not found in environment variables.")
-
-LLM_CONFIG = get_llm_config(llm_provider=llm_provider, api_key=api_key)
-
-librarian_agent = get_librarian_agent_api_agent(custom_llm_config=LLM_CONFIG)
-internal_critic = get_internal_critic_agent(llm_config=LLM_CONFIG, terminate_conversation=True)
-user_proxy = get_user_proxy()
+# Module-level initialization is now done only when running as main script
+# to avoid issues when importing from streamlit_app.py
 
 
 def has_critic_approval(messages: list[dict]) -> bool:
@@ -279,6 +229,62 @@ def process_single_task(task: str, llm_config: dict, librarian_agent, internal_c
 
 def main():
     """Main function to run the book recommender agent."""
+    # Load environment variables
+    dotenv.load_dotenv()
+
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Book Recommender Agent")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--llm-provider",
+        choices=["mistral", "google", "cerebras"],
+        dest="llm_provider",
+        default="google",
+    )
+    group.add_argument(
+        "--google",
+        action="store_const",
+        const="google",
+        dest="llm_provider",
+        help="Use Google as LLM provider",
+    )
+    group.add_argument(
+        "--mistral",
+        action="store_const",
+        const="mistral",
+        dest="llm_provider",
+        help="Use Mistral as LLM provider",
+    )
+    group.add_argument(
+        "--cerebras",
+        action="store_const",
+        const="cerebras",
+        dest="llm_provider",
+        help="Use Cerebras as LLM provider",
+    )
+
+    args = parser.parse_args()
+    llm_provider = args.llm_provider
+
+    if llm_provider == "mistral":
+        env_var_name = "MISTRAL_API_KEY"
+    elif llm_provider == "google":
+        env_var_name = "GOOGLE_LLM_API_KEY"
+    elif llm_provider == "cerebras":
+        env_var_name = "CEREBRAS_API_KEY"
+    else:
+        raise ValueError(f"Unsupported LLM provider: {llm_provider}")
+
+    api_key = os.getenv(env_var_name)
+    if not api_key:
+        raise ValueError(f"{env_var_name} not found in environment variables.")
+
+    LLM_CONFIG = get_llm_config(llm_provider=llm_provider, api_key=api_key)
+
+    librarian_agent = get_librarian_agent_api_agent(custom_llm_config=LLM_CONFIG)
+    internal_critic = get_internal_critic_agent(llm_config=LLM_CONFIG, terminate_conversation=True)
+    user_proxy = get_user_proxy()
+
     try:
         results = []
         for task in simple_tasks:
